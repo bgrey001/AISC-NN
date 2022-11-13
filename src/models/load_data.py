@@ -44,7 +44,16 @@ class data_loader():
         random.shuffle(self.train_seq_list)
         random.shuffle(self.valid_seq_list)
         random.shuffle(self.test_seq_list)
+        # return self.train_seq_list, self.valid_seq_list, self.test_seq_list
         return self.train_seq_list, self.valid_seq_list, self.test_seq_list
+    
+    @classmethod
+    # =============================================================================
+    # shuffle the sequences for each epoch
+    # =============================================================================
+    def shuffle_data(self, train_data):
+        random.shuffle(train_data)
+        return train_data
     
     
     @classmethod
@@ -62,18 +71,21 @@ class data_loader():
     def seq_to_tensor(self, seq): 
         n_features = 5
         input_tensor = torch.zeros(len(seq), 1, n_features)
-        target_tensor = torch.zeros(len(seq), 1)
+        target_tensor = torch.zeros(1)
         for i, item in enumerate(seq):
             input_tensor[i][0][:] = torch.tensor(item[:-1])
-            target_tensor[i][0] = input_tensor[i][0][-1]
-        return input_tensor, target_tensor[0]
+            target_tensor[0] = torch.tensor(item[-1])
+        return input_tensor, target_tensor
 
 
+    def return_classes(self):
+        return ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers']
 
 
 
 
 # print(input_tensor)
+
 
 
 # def seq_to_tensor(item): 

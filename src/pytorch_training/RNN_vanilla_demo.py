@@ -217,31 +217,30 @@ torch.save(rnn.state_dict(), 'models/rnn.pt')
 for param in rnn.parameters():
     print(param)
 
-# def predict(input_line):
-#     print(f"\n> {input_line}")
-#     with torch.no_grad():
-#         line_tensor = line_to_tensor(input_line)
-#         hidden = rnn.init_hidden()
-#         
-#         # forward propagation
-#         for i in range(line_tensor.size()[0]): # process a single sequence in this for loop
-#             output, hidden = rnn(line_tensor[i].to('cuda'), hidden.to('cuda')) # hidden state is being updated each iteration as is the output // forward passes!
-# 
-#         guess = category_from_output(output)
-#         print(guess)
-# 
+def predict(input_line):
+    print(f"\n> {input_line}")
+    with torch.no_grad():
+        line_tensor = line_to_tensor(input_line)
+        hidden = rnn.init_hidden()
+        
+        # forward propagation
+        for i in range(line_tensor.size()[0]): # process a single sequence in this for loop
+            output, hidden = rnn(line_tensor[i].to('cuda'), hidden.to('cuda')) # hidden state is being updated each iteration as is the output // forward passes!
 
-
-# while True:
-#     sentence = input('Input:')
-#     if sentence == "quit":
-#         break
-#     
-#     predict(sentence)
+        guess = category_from_output(output)
+        print(guess)
 
 
 
-# def predict:6
+while True:
+    sentence = input('Input:')
+    if sentence == "quit":
+        break
+    
+    predict(sentence)
+
+
+
     
      
      
