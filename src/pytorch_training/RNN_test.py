@@ -42,9 +42,7 @@ class RNN(nn.Module): # inherit from nn.Module
         
     def forward(self, input_tensor, hidden_tensor): # this is different to a feed forward NN where there is only one input, now we input the hidden state as well
         # combine the input and hidden tensors, process them through the linear layers and then softmax one for output and return both output and hidden
-        
         combined = torch.cat((input_tensor, hidden_tensor), 1).to('cuda')
-        
         hidden = self.i2h(combined) # process the input and hidden tensors through the fully connected layer
         output = self.i2o(combined) # process hidden output through the fc layer
         output = self.softmax(output) # apply activation function
@@ -118,6 +116,14 @@ def test_model(set_size):
 #     print(f'Accuracy = {n_correct/set_size * 100}')
 # =============================================================================
     return n_correct/set_size * 100
+
+
+
+
+
+
+
+test_model(5000)
 
 
 

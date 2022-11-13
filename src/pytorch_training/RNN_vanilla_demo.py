@@ -103,19 +103,23 @@ we take the last output and apply the softmax and take the one with the highest 
 
 """
 
-# =============================================================================
-# input_tensor = line_to_tensor('Albert')[0]
-# print(input_tensor.size())
-# #print(input_tensor[0]) # this is 'A'
-# 
-# 
-# hidden_tensor = rnn.init_hidden()
-# print(hidden_tensor.size())
-# 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model = RNN(N_LETTERS, n_hidden, n_categories).to(device)
-# print(model)
-# =============================================================================
+input_tensor = line_to_tensor('Albert')
+print(input_tensor.size())
+print(input_tensor[0]) # this is 'A'
+category, line, category_tensor, line_tensor = random_training_example(category_lines=category_lines, all_categories=all_categories)
+print(line_tensor[0].size())
+
+hidden_tensor = rnn.init_hidden()
+print(hidden_tensor.size())
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = RNN(N_LETTERS, n_hidden, n_categories).to(device)
+print(model)
+
+
+
+
+
 
 # =============================================================================
 # output, next_hidden = rnn(input_tensor[0], hidden_tensor) # we need to repeatedly call this through all the examples of the sequence
@@ -154,7 +158,9 @@ def train(line_tensor, category_tensor):
 #     each character at a time, the loss is calculated and the gradient is updated
     
     optimizer.zero_grad() # zero the parameters of the gradient so they don't accumulate
-
+    
+    print(category_tensor)
+    
     loss = criterion(output, category_tensor) # calculate the loss based on the error function
     torch.autograd.set_detect_anomaly(True)
     # backward propagation -> backward pass that calculates the gradients 
@@ -197,7 +203,8 @@ for i in range(n_iterations):
         print(f'{i} {loss:.4f} {line} / {guess} {correct}')
         
         
-        
+category, line, category_tensor, line_tensor = random_training_example(category_lines=category_lines, all_categories=all_categories)
+print(category_tensor)        
     
         
 plt.figure()
