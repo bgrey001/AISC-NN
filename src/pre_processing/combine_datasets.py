@@ -5,7 +5,7 @@ Created on Sat Nov 12 01:12:47 2022
 
 @author: benedict
 
-Script to process the data using the pre_processing_module into train and test sets for all the datasets and combine them into 3 large sets:
+Script to process the data using the pre_processing_module into train test and validataion sets for all the datasets and combine them into 3 large sets:
 training validation and testing data and then export using pickle ready for loading in the network scripts
 
 
