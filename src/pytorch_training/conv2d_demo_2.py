@@ -18,7 +18,6 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
-from torchsummary import summary
 
 
 import matplotlib
@@ -43,20 +42,27 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=4, shuffle=False, n
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 #visualise the data
-def imshow(img):
-    img = img / 2 + 0.5     # unnormalize
-    npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+# def imshow(img):
+#     img = img / 2 + 0.5     # unnormalize
+#     npimg = img.numpy()
+#     plt.imshow(np.transpose(npimg, (1, 2, 0)))
 
 
-# get some random training images
-dataiter = iter(trainloader)
-images, labels = next(dataiter)
+# # get some random training images
+# dataiter = iter(trainloader)
+# images, labels = next(dataiter)
 
-# show images
-imshow(torchvision.utils.make_grid(images))
-# print labels
-print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
+# # show images
+# imshow(torchvision.utils.make_grid(images))
+# # print labels
+# print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
+
+for X, y in testloader:
+    input_dim = X.shape
+    output_dim = y.shape
+    # print(f"Shape of X [N, C, H, W]: {X.shape}")
+    # print(f"Shape of y: {y.shape} {y.dtype}")
+    break
 
 
 
@@ -65,34 +71,53 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         # add layers to the model (instance of Net class (inherited from nn.Module))
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5)
+# =============================================================================
+#         self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=3)
+#         self.pool = nn.MaxPool2d(2, 2)
+#         self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3)
+#         
+#         self.fc1 = nn.Linear(in_features=16 * 5 * 5, out_features=120)
+#         self.fc2 = nn.Linear(in_features=120, out_features=84)
+#         self.fc3 = nn.Linear(in_features=84, out_features=10)
+# =============================================================================
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=3) # C1
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3) # C3
+        self.fc1 = nn.Linear(in_features=16 * 6 * 6, out_features=120)  # 6*6 from image dimension F5
+        self.fc2 = nn.Linear(in_features=120, out_features=84) # F6
+        self.fc3 = nn.Linear(in_features=84, out_features=10) # OUTPUT
         
-        self.fc1 = nn.Linear(in_features=16 * 5 * 5, out_features=120)
-        self.fc2 = nn.Linear(in_features=120, out_features=84)
-        self.fc3 = nn.Linear(in_features=84, out_features=10)
         
         
     def forward(self, x):
         
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5) # view() reshapes the tensor like numpy's reshape() but without copying memory
-        
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        
-        x = self.fc3(x)
-        
-        return x
+# =============================================================================
+#         x = self.pool(F.relu(self.conv1(x)))
+#         x = self.pool(F.relu(self.conv2(x)))
+#         # x = x.view(-1, 16 * 5 * 5) # view() reshapes the tensor like numpy's reshape() but without copying memory
+#         
+#         x = F.relu(self.fc1(x))
+#         x = F.relu(self.fc2(x))
+#         
+#         x = self.fc3(x)
+#         
+#         return x
+# 
+# =============================================================================
+            # Max pooling over a (2, 2) window    
+            x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
+            # If the size is a square you can only specify a single number
+            x = F.max_pool2d(F.relu(self.conv2(x)), 2)
+            x = x.view(-1, self.num_flat_features(x))
+            x = F.relu(self.fc1(x))
+            x = F.relu(self.fc2(x))
+            x = self.fc3(x)
+            return x
         
         
 net = Net() # create an instance of this model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # PyTorch v0.4.0
 model = Net().to(device)
 
-summary(model, (3, 32, 32))
 
 # =============================================================================
 # for p in net.parameters():
@@ -115,31 +140,32 @@ optimiser = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # 
 # 
 # 
-# for epoch in range(2):
-#     
-#     running_loss = 0.0
-#     
-#     for i, data in enumerate(trainloader, 0):
-#         # get the inputs
-#         inputs, labels = data
-#          
+for epoch in range(2):
+    
+    running_loss = 0.0
+    
+    for i, data in enumerate(trainloader, 0):
+        # get the inputs
+        inputs, labels = data
+        print(labels)
+          
         # zero the parameter gradients
-#        optimizer.zero_grad()
+        # optimiser.zero_grad()
 
-        # forward + backward + optimize
-#        outputs = net(inputs)
-#        loss = criterion(outputs, labels)
- #       loss.backward()
- #       optimizer.step()
-# 
-#         # print statistics
-#         running_loss += loss.item()
-#         if i % 2000 == 1999:
-#             print('[%d, %5d] loss: %.3f' %
-#                   (epoch + 1, i + 1, running_loss / 2000))
-#             running_loss = 0.0
-#         
-# print('Finished training')
+        # # forward + backward + optimize
+        # outputs = net(inputs)
+        # loss = criterion(outputs, labels)
+        # loss.backward()
+        # optimiser.step()
+
+        # # print statistics
+        # running_loss += loss.item()
+        # if i % 2000 == 1999:
+        #     print('[%d, %5d] loss: %.3f' %
+        #           (epoch + 1, i + 1, running_loss / 2000))
+        #     running_loss = 0.0
+        
+print('Finished training')
 # 
 # 
 # # =============================================================================

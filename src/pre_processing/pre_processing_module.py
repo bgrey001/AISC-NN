@@ -35,6 +35,7 @@ class pre_processing_module:
     def __init__(self, dataset):
         
         # init attributes
+
         self.list_df = []
         self.list_df_resampled = []
         self.x_batches = []
@@ -60,7 +61,7 @@ class pre_processing_module:
         vessel_list = []
         vessel_ids = self.df['mmsi'].unique()
         for v in vessel_ids:
-            temp_df = self.df[self.df['mmsi'] == v]
+            temp_df = self.df[self.df['mmsi'] == v].reset_index(drop=True)
             vessel_list.append(temp_df)
         return vessel_list
     
@@ -73,16 +74,14 @@ class pre_processing_module:
         
         # list to be returned
         list_df = []
+        max_seq_length = 510
         
         # set first timestamp and the time difference threshold
         t0 = dataframe['timestamp'].iloc[0]
         delta_size = timedelta(hours=time_period)
         curr_dif = timedelta(hours=0)
 
-        # temp make the df smaller for testing
-        # dataframe = dataframe.head(50)
         initial_index = 0
-
         for i in range(0, len(dataframe)):
             
             curr_t = dataframe['timestamp'].iloc[i]
@@ -91,10 +90,13 @@ class pre_processing_module:
             if (curr_dif >= delta_size):
                 # make sure size is meaningful (greater than threshold)
                 if ((i - initial_index) > threshold):     
-                    list_df.append(dataframe.iloc[initial_index : i, :])
+                    list_df.append(dataframe.iloc[initial_index : i, :].reset_index(drop=True))
+                    
+                # if uniform: # pad with zeroes to be the same length as the largest sequence
                 t0 = dataframe['timestamp'].iloc[i]
                 initial_index = i
-
+                
+                        
         return list_df
     
     
@@ -102,23 +104,30 @@ class pre_processing_module:
     # =============================================================================
     # helper method that featurises the time differences between items in the sequence
     # =============================================================================
-    def create_deltas(self, list_df): # also removing some undesirable columns, should refactor
+    def create_deltas(self, list_df): # also removing some undesirable columns
         total_num_seconds = 86400
         new_list = []
         for df in list_df:
-            # compute change in time for each timestep and create feature delta_t
-            df['delta_t'] = (df['timestamp']-df['timestamp'].shift()).fillna(pd.Timedelta(seconds=0))
-            # get cummalative sum of the delta column
-            df['delta_t_cum'] = df['delta_t'].cumsum()
-            # print(type(df['delta_t']))
-            df['normalised_delta'] = df['delta_t'].dt.total_seconds() / total_num_seconds # normalising date time
-            df = df.drop(columns=['mmsi', 'timestamp', 'distance_from_shore', 'distance_from_port', 'is_fishing', 'delta_t', 'delta_t_cum'])
-            # move targets to end
-            df['target'] = df['desired']
+            
+            # time deltas 
+            df['delta_t'] = (df['timestamp']-df['timestamp'].shift()).fillna(pd.Timedelta(seconds=0)) # compute change in time for each timestep and create feature delta_t
+            df['delta_t_cum'] = df['delta_t'].cumsum() # get cummalative sum of the delta column
+            df['normalised_delta_t'] = df['delta_t'].dt.total_seconds() / total_num_seconds # normalising date time
+            
+            # course and speed deltas
+            df['delta_c'] = (df['course']-df['course'].shift()).abs() # course difference
+            df.loc[df['delta_c'] >= 180, 'delta_c'] -= 360 # in degrees so we need to make sure the range stays between 0 and 360
+            df['delta_c'] = df['delta_c'].abs()
+            df['delta_s'] = (df['speed']-df['speed'].shift()).abs() # speed difference
+            
+            # convert lat and lon to x, y, z coordinates as they are 3D
+            
+            
+            # df = df.drop(columns=drop_columns)
+            df['tagets'] = df['desired'] # move targets to end
             df = df.drop(columns=['desired'])
             
             # remains to be seen if we need to scale lat and lon
-        
             new_list.append(df)
         return new_list
     
@@ -126,41 +135,57 @@ class pre_processing_module:
     # =============================================================================
     # helper method that calls segment_dataframes and create_deltas to form the final sequences for feeding into the training algorithms
     # =============================================================================
-    def build_sequences(self, list_df, time_period, threshold):
-        # list_df = self.partition_vessels() # need to init list_df
+    def build_sequences(self, list_df, time_period, threshold, max_seq_length, uniform=False, drop_columns=[]):
+
         df_list_seq = []
         normalised_list_seq = []
+        
         # first, segment the datframes
         for df in list_df:    
             df_list_seq.append(self.segment_dataframe(dataframe=df, time_period=time_period, threshold=threshold))
+           
+        # padding for creating uniform time sequences
+        if uniform:
+            for i, df_list in enumerate(df_list_seq):
+                # print(i)
+                for j, df in enumerate(df_list):
+                    df_list[j] = df_list[j].reindex(list(range(0, max_seq_length))).reset_index(drop=True)
+                    df_list[j] = df_list[j].drop(columns=drop_columns)
         
-        for sub_list in df_list_seq:
-            normalised_list_seq.append(self.create_deltas(sub_list))
-            
-        sequences = [item for sub_list in normalised_list_seq for item in sub_list]
+        # return df_list_seq
+        sequences = [item for sub_list in df_list_seq for item in sub_list]
+        
         # convert to numpy arrays
         for i in range(len(sequences)): 
             sequences[i] = sequences[i].to_numpy()
             
         # print(f'Number of sequences in the dataset: {len(sequences)}')
-            
         return sequences
 
     @classmethod
     # =============================================================================
     # helper method that calls build_sequences on the train and test lists to return the fully processed lists of sequences
     # =============================================================================
-    def return_test_train_sets(self, train_max_length, valid_max_length, test_max_length):
+    def return_test_train_sets(self, max_seq_length, train_max_length=0, valid_max_length=0, test_max_length=0, max_length=False):
+       
+        drop_columns = ['mmsi', 'timestamp', 'distance_from_shore', 'distance_from_port', 'delta_t', 'delta_t_cum', 'course', 'speed']
+        
+        
         df = self.partition_vessels()
-        list_train, list_valid, list_test = self.split_scale(df)
-        list_train_seq = self.build_sequences(list_df=list_train, time_period=24, threshold=4)
-        list_valid_seq = self.build_sequences(list_df=list_valid, time_period=24, threshold=4)
-        list_test_seq = self.build_sequences(list_df=list_test, time_period=24, threshold=4)
+        df_list = self.create_deltas(list_df=df)
+        list_train, list_valid, list_test = self.split_scale(df_list)
         
-        print(f'Number of sequences in the dataset: {len(list_train_seq)}')
+        list_train_seq = self.build_sequences(list_df=list_train, time_period=24, threshold=1, max_seq_length=max_seq_length, uniform=True, drop_columns=drop_columns)
+        list_valid_seq = self.build_sequences(list_df=list_valid, time_period=24, threshold=1, max_seq_length=max_seq_length, uniform=True, drop_columns=drop_columns)
+        list_test_seq = self.build_sequences(list_df=list_test, time_period=24, threshold=1, max_seq_length=max_seq_length, uniform=True, drop_columns=drop_columns)
         
-        return list_train_seq[:train_max_length], list_valid_seq[:valid_max_length], list_test_seq[:test_max_length]
-
+        # print(f'Number of train sequences in the dataset: {len(list_train_seq)}')
+        # print(f'Number of val sequences in the dataset: {len(list_valid_seq)}')
+        # print(f'Number of test sequences in the dataset: {len(list_test_seq)}')
+        
+        # if max_length:
+            # return list_train_seq[:train_max_length], list_valid_seq[:valid_max_length], list_test_seq[:test_max_length]
+        return list_train_seq, list_valid_seq, list_test_seq
         
     
 
@@ -168,22 +193,27 @@ class pre_processing_module:
     # =============================================================================
     # helper method that splits the data into train and test sets and then normalises based on the data in the train sets
     # =============================================================================
-    def split_scale(self, list_df): # takes as input the output of partition_vessels()
+    def split_scale(self, list_df): # takes as input the output of create_deltas()
         list_train = []
         list_valid = []
         list_test = []
         for df in list_df:
+            # print(i)
             
             dfx = df.iloc[:, :-1]
             dfy = df.iloc[:, -1]
             # shuffle must be false as we need to preserve the order of the time sequences 
             X_train, X_rem, y_train, y_rem = train_test_split(dfx, dfy, train_size=0.8, random_state=None, shuffle=False, stratify=None)
             X_valid, X_test, y_valid, y_test = train_test_split(X_rem, y_rem, test_size=0.5, random_state=None, shuffle=False, stratify=None)
-            
+
             scaler = MinMaxScaler()
-            X_train[['speed', 'course', 'lat', 'lon']] = scaler.fit_transform(X_train[['speed', 'course', 'lat', 'lon']])
-            X_valid[['speed', 'course', 'lat', 'lon']] = scaler.transform(X_valid[['speed', 'course', 'lat', 'lon']])
-            X_test[['speed', 'course', 'lat', 'lon']] = scaler.transform(X_test[['speed', 'course', 'lat', 'lon']])
+            # X_train[['speed', 'course', 'lat', 'lon']] = scaler.fit_transform(X_train[['speed', 'course', 'lat', 'lon']])
+            # X_valid[['speed', 'course', 'lat', 'lon']] = scaler.transform(X_valid[['speed', 'course', 'lat', 'lon']])
+            # X_test[['speed', 'course', 'lat', 'lon']] = scaler.transform(X_test[['speed', 'course', 'lat', 'lon']])
+            
+            X_train[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.fit_transform(X_train[['lat', 'lon', 'delta_c', 'delta_s']])
+            X_valid[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_valid[['lat', 'lon', 'delta_c', 'delta_s']])
+            X_test[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_test[['lat', 'lon', 'delta_c', 'delta_s']])
             
             # now reassign the targets to the datasets for transporting
             df_train = X_train

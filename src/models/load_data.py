@@ -14,10 +14,6 @@ import torch
 import numpy as np
 import random
 
-
-
-
-
 class data_loader():
     
     
@@ -26,14 +22,14 @@ class data_loader():
     # constructor
     # =============================================================================
     def __init__(self):
-        random.seed(10) # set random seed to reproduce random results
-        with open('../../data/pkl/train.pkl', 'rb') as f:
+        random.seed(15) # set random seed to reproduce random results
+        with open('../../data/pkl/train_v2.pkl', 'rb') as f:
             self.train_seq_list = pickle.load(f)
             
-        with open('../../data/pkl/valid.pkl', 'rb') as f:
+        with open('../../data/pkl/valid_v2.pkl', 'rb') as f:
             self.valid_seq_list = pickle.load(f)
         
-        with open('../../data/pkl/test.pkl', 'rb') as f:
+        with open('../../data/pkl/test_v2.pkl', 'rb') as f:
             self.test_seq_list = pickle.load(f)
             
     @classmethod

@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 import load_data as ld
 
 # =============================================================================
@@ -61,13 +62,14 @@ class GRU_wrapper():
     # =============================================================================
     # Class attributes
     # =============================================================================
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    history = []
     # Hyperparameters
     input_size = 5
     n_classes = 6
     num_layers = 2
     hidden_size = 128
-    eta = 0.001
+    eta = 0.01
     
     @classmethod
     # =============================================================================
@@ -81,7 +83,6 @@ class GRU_wrapper():
         # load data using class load_data.py, set to shuffled for now
         self.data_loader = ld.data_loader()
         self.train_data, self.valid_data, self.test_data = self.data_loader.load_shuffled()
-        
         
     @classmethod 
     def class_from_output(self, output, is_tensor):
@@ -110,7 +111,6 @@ class GRU_wrapper():
         loss.backward() # calculate the gradients aka the loss with respect to the parameters in the computational tree
         self.optimizer.step() # update the parameters based on the grad attribute calculated in the previous line
         return output, loss.item() # returning the last loss and predicted output of the sequence
-    
 
     @classmethod
     # =============================================================================
@@ -127,64 +127,53 @@ class GRU_wrapper():
             v_loss = self.criterion(output, target_tensor)
             return output, v_loss.item()
         
-    
-    
     @classmethod
     # =============================================================================
     # Predictions
     # =============================================================================
     def predict(self):
-        self.model.eval()
-        accuracies = []
-        counter = 0
-        correct_guesses = 0
+        # helper variables
+        # total_correct = 0
+        
         print_steps = 200
+        plot_steps = 200
         
-        with torch.no_grad():
-            print('Begin testing')
-            for i, seq in enumerate(self.test_data):
-                input_tensor, target_tensor = self.data_loader.seq_to_tensor(seq) 
-                target_tensor = target_tensor.type(torch.LongTensor) 
-                pred_output, test_loss = self.validate(input_tensor.to(self.device), target_tensor.to(self.device))
+        t_accuracies = []
+        curr_t_loss = 0
+        test_loss = []
+        t_counter = 0
+        t_correct_guesses = 0
+
+        print('Beginning testing')
+        # validation loop through validation sequences
+        for i, seq in enumerate(self.test_data):
+                    
+            input_tensor, target_tensor = self.data_loader.seq_to_tensor(seq) 
+            target_tensor = target_tensor.type(torch.LongTensor) 
+            t_output, t_loss = self.validate(input_tensor.to(self.device), target_tensor.to(self.device))
+            t_counter += 1
+            guess = self.class_from_output(t_output, True)
+            actual = self.class_from_output(target_tensor, False)
+            correct = ''
+            if guess == actual:
+                t_correct_guesses += 1
+                correct = 'CORRECT'
+            else:
+                correct = 'INCORRECT'
+                        
+            if (i + 1) % (print_steps) == 0:  
+                print(f'Test seq number: {i}, test loss = {t_loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
+
+            # for graphing
+            curr_t_loss += t_loss
+            if (i + 1) % plot_steps == 0:
+                test_loss.append(curr_t_loss / plot_steps) # taking averages for graphing
+                curr_t_loss = 0
                 
-                if (i + 1) % (print_steps) == 0:  
-                    counter += 1
-                    print(f'counter! {counter}')
-                    guess = self.class_from_output(pred_output, True)
-                    actual = self.class_from_output(target_tensor, False)
-                    correct = ''
-                    if guess == actual:
-                        correct_guesses += 1
-                        correct = 'CORRECT'
-                    else:
-                        correct = 'INCORRECT'
-                    print(f'Training seq number: {i}, testing loss = {test_loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
-                accuracies.append((correct_guesses / counter) * 100)
-                
-        return accuracies
-                
-                # if (i + 1) % (print_steps/10) == 0:    
-                #     # print(f'Epoch {epoch}, training seq number: {i}, training loss = {loss}')
-                #     guess = self.class_from_output(pred_output, True)
-                #     actual = self.class_from_output(target_tensor, False)
-                #     if  (actual == guess):
-                #         print(f' CORRECT -> predicted output = {guess}, actual output = {actual}')
-                #     print(f' INCORRECT -> predicted output = {guess}, actual output = {actual}')
-                # guess = self.data_loader.()
-            
-        # return
+        if t_counter != 0:
+            print(f'Accuracy of testing epoch: {(t_correct_guesses / t_counter) * 100}')
     
-    
-    
-    
-    # @classmethod
-    # # =============================================================================
-    # # Predict single target
-    # # =============================================================================
-    # def predict_single(self):
-        
-    
-    
+        return t_accuracies, test_loss
     
     @classmethod
     # =============================================================================
@@ -194,16 +183,12 @@ class GRU_wrapper():
         self.model.eval()
         # helper variables
         # total_correct = 0
-        
         print_steps = 200
         plot_steps = 200
-        
         if verbose:
             plot_steps = plot_steps / 20
-        
         accuracies = []
         v_accuracies = []
-        
         curr_t_loss = 0
         curr_v_loss = 0
         train_loss = []
@@ -227,9 +212,9 @@ class GRU_wrapper():
                 target_tensor = target_tensor.type(torch.LongTensor) # convert target tensor to LongTensor for compatibility
                 output, loss = self.train(input_tensor.to(self.device), target_tensor.to(self.device)) # call train method for one sequence
                 
-                if (loss <= loss_limit): # break the loop if the loss is low enough
-                    print(f'Loss is lower than set limit-> final loss = {loss}')
-                    break
+                # if (loss <= loss_limit): # break the loop if the loss is low enough
+                #     print(f'Loss is lower than set limit-> final loss = {loss}')
+                #     break
                 
                 counter += 1
                 guess = self.class_from_output(output, True)
@@ -274,18 +259,19 @@ class GRU_wrapper():
                     if (i + 1) % (print_steps) == 0:  
                         print(f'Epoch {epoch}, val seq number: {i}, val loss = {v_loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
 
+                    # for graphing
+                    curr_v_loss += v_loss
+                    if (i + 1) % plot_steps == 0:
+                        val_loss.append(curr_v_loss / plot_steps) # taking averages for graphing
+                        curr_v_loss = 0
                         
-                # print(f'Accuracy of epoch: {(correct_guesses / counter) * 100}')
             if counter != 0:
-                print(f'Accuracy of epoch: {(correct_guesses / counter) * 100}')
+                print(f'Accuracy of training epoch: {(correct_guesses / counter) * 100}')
+                print(f'Accuracy of validation set: {(v_correct_guesses / v_counter) * 100}')
                 accuracies.append((correct_guesses / counter) * 100)
                 v_accuracies.append((v_correct_guesses / v_counter) * 100)
-        return accuracies, v_accuracies, train_loss, val_loss
+        self.history.append([accuracies, v_accuracies, train_loss, val_loss])
                     
-                    
-                    
-
-        
     @classmethod
     # =============================================================================
     # method to save model to state_dict
@@ -303,36 +289,156 @@ class GRU_wrapper():
         print(f'{model_name} state dictionary successfully loaded')
         print(self.model.eval())
 
-
-
+    @classmethod
+    # =============================================================================
+    # method to print params of model
+    # =============================================================================
+    def print_params(self):
+        params = self.model.parameters()
+        for p in params:
+            print(p)
+            
+    @classmethod
+    # =============================================================================
+    # returns history
+    # =============================================================================            
+    def return_history(self):
+        return self.history
+            
+    @classmethod
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================            
+    def save_history(self, version_number):
+        with open(f'pkl/GRU_RNN_v{version_number}_history.pkl', 'wb') as f:
+            pickle.dump(self.history, f)
+            print('History saved')
 
 
 # =============================================================================
 # instantiate model and wrapper then train and save
 # =============================================================================
 model = GRU_wrapper(GRU_RNN)
-accuracies, v_accuracies, train_losses, val_losses = model.fit(epochs=5, loss_limit=0, validate=True, verbose=False)
-model.save_model('GRU_RNN_v2')
-# t_accuracies = model.predict()
+model.fit(epochs=10, loss_limit=0, validate=True, verbose=False)
+model.save_model('GRU_RNN_v4')
+
+
+
+"""
+Paremeters for GRU_RNN_v2:
+tensor([-0.2460,  0.1251,  0.0764,  0.0246, -0.3283,  0.1671],
+       requires_grad=True)
+"""
+
+
 
 # plt.figure()
-# plt.plot(all_losses)
+# plt.plot(train_losses)
 # plt.show()
-
-
-
 
 
 # =============================================================================
 # instantiate model and wrapper then load
 # =============================================================================
 # model = GRU_wrapper(GRU_RNN)
-# model.load_model('GRU_RNN_v1')
+# model.load_model('GRU_RNN_v3')
 # model.predict()
 
+"""
+DOCUMENTATION: 
+TEST 1:
+    Model: GRU-RNN_v2 -> Hyperparameters:
+        2 layered GRU with 128 hidden units
+        1 layer fully connected with 128 units
+        Learning rate = 0.001
+        Optimiser = Adam
+        Loss = CrossEntropyLoss
+    Data: Evenly distributed, uninterpolated, featurised, threshold for sequence length of 4 (must be greater)
+    RESULTS:
+        Test accuracy on randomseed=15 is 66.39%      
+        Common sense baseline for evenly distributed classes is 16.67%.
+
+TEST 2:
+    Model: GRU-RNN_v3 -> Hyperparameters:
+        2 layered GRU with 128 hidden units
+        1 layer fully connected with 128 units
+        Learning rate = 0.0003 -> CHANGED
+        Optimiser = Adam
+        Loss = CrossEntropyLoss    
+    Data: Evenly distributed, uninterpolated, featurised, threshold for sequence length of 1 (must be greater), i.e. no threshold -> CHANGED
+    RESULTS: 
+        Test accuracy on randomseed=15 is 59.02%
+ 
+TEST 3:
+    Model: GRU-RNN_v4 -> Hyperparameters:
+        2 layered GRU with 128 hidden units
+        1 layer fully connected with 128 units
+        Learning rate = 0.01 -> CHANGED
+        Optimiser = Adam
+        Loss = CrossEntropyLoss    
+    Data: Evenly distributed, uninterpolated, featurised, threshold for sequence length of 1 (must be greater), i.e. no threshold -> CHANGED
+    RESULTS: 
+        Test accuracy on randomseed=15 
+        
+  
+    
+Introduce all data!
+
+"""
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+Common sense baseline: Based on random decision, what is the outcome? Compare to this common sense baseline / statistical power
+Get a working prototype, a small model with statistical power
+Regularisation to deal with overfitting
+
+More data is better, despite imbalance - statisitcal power is harder to achieve with imbalanced
+
+Common sense baseline:
+    Common sense would be the probability of predicting one class all the time
+    Find methods for dealing with imalance
+    
+    Maybe don't remove straight line courses
+    Prove my a priori knowledge is correct!
+    
+    
+    
+    
+    
+Mark scheme:
+    Functionality of the project is to a working level
+    Functioning prototype
+    
+    
+GAN
+Time series data augmentation
+
+
+
+
+"""
 
 
 
