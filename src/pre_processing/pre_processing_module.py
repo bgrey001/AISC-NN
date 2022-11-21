@@ -20,7 +20,7 @@ from pandas.core.common import SettingWithCopyWarning
 import matplotlib.pyplot as plt
 import torch
 from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, Normalizer, StandardScaler
 from sklearn.model_selection import train_test_split
 from datetime import datetime, timedelta
 
@@ -28,14 +28,14 @@ warnings.simplefilter(action="ignore", category=SettingWithCopyWarning) # ignore
 
 class pre_processing_module:
     
-    @classmethod
+    
     # =============================================================================
     # constructor method to initialise attributes, import dataset and execute integer encoding
     # =============================================================================
     def __init__(self, dataset):
         
         # init attributes
-
+        self.dataset = dataset
         self.list_df = []
         self.list_df_resampled = []
         self.x_batches = []
@@ -52,21 +52,26 @@ class pre_processing_module:
         self.desired = le.transform([self.desired])
         self.df['desired'] = self.desired[0]
         
+        self.list_train_data = []
+        self.list_valid_data = []
+        self.list_test_data = []
         
-    @classmethod
+
+    # @classmethod
     # =============================================================================
     # helper method to divide the dataset based on their maritime mobile service identity (mmsi)
     # =============================================================================
     def partition_vessels(self):
         vessel_list = []
-        vessel_ids = self.df['mmsi'].unique()
+        df = self.df
+        vessel_ids = df['mmsi'].unique()
         for v in vessel_ids:
-            temp_df = self.df[self.df['mmsi'] == v].reset_index(drop=True)
+            temp_df = df[df['mmsi'] == v].reset_index(drop=True)
             vessel_list.append(temp_df)
         return vessel_list
     
     
-    @classmethod
+    # @classmethod
     # =============================================================================
     # helper method to break unique dataframes into time periods
     # =============================================================================
@@ -100,19 +105,20 @@ class pre_processing_module:
         return list_df
     
     
-    @classmethod
+    # @classmethod
     # =============================================================================
     # helper method that featurises the time differences between items in the sequence
     # =============================================================================
-    def create_deltas(self, list_df): # also removing some undesirable columns
+    def create_deltas(self, list_df, interpolated): # also removing some undesirable columns
         total_num_seconds = 86400
         new_list = []
         for df in list_df:
             
-            # time deltas 
-            df['delta_t'] = (df['timestamp']-df['timestamp'].shift()).fillna(pd.Timedelta(seconds=0)) # compute change in time for each timestep and create feature delta_t
-            df['delta_t_cum'] = df['delta_t'].cumsum() # get cummalative sum of the delta column
-            df['normalised_delta_t'] = df['delta_t'].dt.total_seconds() / total_num_seconds # normalising date time
+            if not interpolated:
+                # time deltas 
+                df['delta_t'] = (df['timestamp']-df['timestamp'].shift()).fillna(pd.Timedelta(seconds=0)) # compute change in time for each timestep and create feature delta_t
+                df['delta_t_cum'] = df['delta_t'].cumsum() # get cummalative sum of the delta column
+                df['normalised_delta_t'] = df['delta_t'].dt.total_seconds() / total_num_seconds # normalising date time
             
             # course and speed deltas
             df['delta_c'] = (df['course']-df['course'].shift()).abs() # course difference
@@ -131,11 +137,11 @@ class pre_processing_module:
             new_list.append(df)
         return new_list
     
-    @classmethod
+    # @classmethod
     # =============================================================================
-    # helper method that calls segment_dataframes and create_deltas to form the final sequences for feeding into the training algorithms
+    # helper method that calls segment_dataframes
     # =============================================================================
-    def build_sequences(self, list_df, time_period, threshold, max_seq_length, uniform=False, drop_columns=[]):
+    def build_sequences(self, list_df, time_period, threshold, max_seq_length, uniform, drop_columns=[]):
 
         df_list_seq = []
         normalised_list_seq = []
@@ -145,12 +151,13 @@ class pre_processing_module:
             df_list_seq.append(self.segment_dataframe(dataframe=df, time_period=time_period, threshold=threshold))
            
         # padding for creating uniform time sequences
-        if uniform:
-            for i, df_list in enumerate(df_list_seq):
-                # print(i)
-                for j, df in enumerate(df_list):
-                    df_list[j] = df_list[j].reindex(list(range(0, max_seq_length))).reset_index(drop=True)
-                    df_list[j] = df_list[j].drop(columns=drop_columns)
+        for i, df_list in enumerate(df_list_seq):
+            # print(i)
+            for j, df in enumerate(df_list):
+                if uniform:
+                    df_list[j] = df_list[j].reindex(list(range(0, max_seq_length))).reset_index(drop=True) # padding operation
+                df_list[j] = df_list[j].reset_index(drop=True) # reset indices
+                df_list[j] = df_list[j].drop(columns=drop_columns) # drop columns
         
         # return df_list_seq
         sequences = [item for sub_list in df_list_seq for item in sub_list]
@@ -162,34 +169,40 @@ class pre_processing_module:
         # print(f'Number of sequences in the dataset: {len(sequences)}')
         return sequences
 
-    @classmethod
+    # @classmethod
     # =============================================================================
     # helper method that calls build_sequences on the train and test lists to return the fully processed lists of sequences
     # =============================================================================
-    def return_test_train_sets(self, max_seq_length, train_max_length=0, valid_max_length=0, test_max_length=0, max_length=False):
+    def return_test_train_sets(self, uniform, interpolated=False):
+        
+        if interpolated:
+            time_interval = 10
+            return self.return_interpolated_data(time_interval=time_interval, fixed_window=True)
        
         drop_columns = ['mmsi', 'timestamp', 'distance_from_shore', 'distance_from_port', 'delta_t', 'delta_t_cum', 'course', 'speed']
         
+        max_seq_length = 1887 # this should be set the largest sequence length in all the datasets
+        threshold = 150 # this is the minimum that a sequence can be to be included in the dataset
+        time_period = 24 # this is the length of each time window in hours
+        
         
         df = self.partition_vessels()
-        df_list = self.create_deltas(list_df=df)
+        df_list = self.create_deltas(list_df=df, interpolated=False)
         list_train, list_valid, list_test = self.split_scale(df_list)
+
+        list_train_seq = self.build_sequences(list_df=list_train, time_period=time_period, threshold=threshold, max_seq_length=max_seq_length, uniform=uniform, drop_columns=drop_columns)
+        list_valid_seq = self.build_sequences(list_df=list_valid, time_period=time_period, threshold=threshold, max_seq_length=max_seq_length, uniform=uniform, drop_columns=drop_columns)
+        list_test_seq = self.build_sequences(list_df=list_test, time_period=time_period, threshold=threshold, max_seq_length=max_seq_length, uniform=uniform, drop_columns=drop_columns)
+
+        print(f'Number of train sequences in the dataset: {len(list_train_seq)}')
+        print(f'Number of val sequences in the dataset: {len(list_valid_seq)}')
+        print(f'Number of test sequences in the dataset: {len(list_test_seq)}')
         
-        list_train_seq = self.build_sequences(list_df=list_train, time_period=24, threshold=1, max_seq_length=max_seq_length, uniform=True, drop_columns=drop_columns)
-        list_valid_seq = self.build_sequences(list_df=list_valid, time_period=24, threshold=1, max_seq_length=max_seq_length, uniform=True, drop_columns=drop_columns)
-        list_test_seq = self.build_sequences(list_df=list_test, time_period=24, threshold=1, max_seq_length=max_seq_length, uniform=True, drop_columns=drop_columns)
-        
-        # print(f'Number of train sequences in the dataset: {len(list_train_seq)}')
-        # print(f'Number of val sequences in the dataset: {len(list_valid_seq)}')
-        # print(f'Number of test sequences in the dataset: {len(list_test_seq)}')
-        
-        # if max_length:
-            # return list_train_seq[:train_max_length], list_valid_seq[:valid_max_length], list_test_seq[:test_max_length]
         return list_train_seq, list_valid_seq, list_test_seq
         
     
 
-    @classmethod
+    # @classmethod
     # =============================================================================
     # helper method that splits the data into train and test sets and then normalises based on the data in the train sets
     # =============================================================================
@@ -197,43 +210,91 @@ class pre_processing_module:
         list_train = []
         list_valid = []
         list_test = []
-        for df in list_df:
-            # print(i)
-            
-            dfx = df.iloc[:, :-1]
-            dfy = df.iloc[:, -1]
-            # shuffle must be false as we need to preserve the order of the time sequences 
-            X_train, X_rem, y_train, y_rem = train_test_split(dfx, dfy, train_size=0.8, random_state=None, shuffle=False, stratify=None)
-            X_valid, X_test, y_valid, y_test = train_test_split(X_rem, y_rem, test_size=0.5, random_state=None, shuffle=False, stratify=None)
+        
+        # we need to merge all the dataframes here and then scale them
+        # step 1, merge al the dataframes
+        # step 2, split then scale
+        
+        
+        # merge dataframes
+        df = pd.concat(list_df)
+        
+        # now split and scale
 
-            scaler = MinMaxScaler()
-            # X_train[['speed', 'course', 'lat', 'lon']] = scaler.fit_transform(X_train[['speed', 'course', 'lat', 'lon']])
-            # X_valid[['speed', 'course', 'lat', 'lon']] = scaler.transform(X_valid[['speed', 'course', 'lat', 'lon']])
-            # X_test[['speed', 'course', 'lat', 'lon']] = scaler.transform(X_test[['speed', 'course', 'lat', 'lon']])
-            
-            X_train[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.fit_transform(X_train[['lat', 'lon', 'delta_c', 'delta_s']])
-            X_valid[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_valid[['lat', 'lon', 'delta_c', 'delta_s']])
-            X_test[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_test[['lat', 'lon', 'delta_c', 'delta_s']])
-            
-            # now reassign the targets to the datasets for transporting
-            df_train = X_train
-            df_train['desired'] = y_train
-            
-            df_valid = X_valid
-            df_valid['desired'] = y_valid
+        dfx = df.iloc[:, :-1]
+        dfy = df.iloc[:, -1]
+        # shuffle must be false as we need to preserve the order of the time sequences 
+        X_train, X_rem, y_train, y_rem = train_test_split(dfx, dfy, train_size=0.8, random_state=None, shuffle=False, stratify=None)
+        X_valid, X_test, y_valid, y_test = train_test_split(X_rem, y_rem, test_size=0.5, random_state=None, shuffle=False, stratify=None)
 
-            df_test = X_test
-            df_test['desired'] = y_test
-            list_train.append(df_train)
-            list_valid.append(df_valid)
-            list_test.append(df_test)
-            
+        # scaler = MinMaxScaler()
+        # scaler = Normalizer()
+        # scaler = StandardScaler()
+        # X_train[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.fit_transform(X_train[['lat', 'lon', 'delta_c', 'delta_s']])
+        # X_valid[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_valid[['lat', 'lon', 'delta_c', 'delta_s']])
+        # X_test[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_test[['lat', 'lon', 'delta_c', 'delta_s']])
+        
+        # 
+        # now reassign the targets to the datasets for transporting
+        df_train = X_train
+        df_train['desired'] = y_train
+        
+        df_valid = X_valid
+        df_valid['desired'] = y_valid
+
+        df_test = X_test
+        df_test['desired'] = y_test
+        list_train.append(df_train)
+        list_valid.append(df_valid)
+        list_test.append(df_test)
+
+        
         return list_train, list_valid, list_test
+
+        
+        
+        
+        
+        
+# =============================================================================
+# ALL WORKS, sort of
+#         for df in list_df:
+#             # print(i)
+#             
+#             dfx = df.iloc[:, :-1]
+#             dfy = df.iloc[:, -1]
+#             # shuffle must be false as we need to preserve the order of the time sequences 
+#             X_train, X_rem, y_train, y_rem = train_test_split(dfx, dfy, train_size=0.8, random_state=None, shuffle=False, stratify=None)
+#             X_valid, X_test, y_valid, y_test = train_test_split(X_rem, y_rem, test_size=0.5, random_state=None, shuffle=False, stratify=None)
+# 
+#             # scaler = MinMaxScaler()
+#             # scaler = Normalizer()
+#             scaler = StandardScaler()
+#             X_train[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.fit_transform(X_train[['lat', 'lon', 'delta_c', 'delta_s']])
+#             X_valid[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_valid[['lat', 'lon', 'delta_c', 'delta_s']])
+#             X_test[['lat', 'lon', 'delta_c', 'delta_s']] = scaler.transform(X_test[['lat', 'lon', 'delta_c', 'delta_s']])
+#             
+#             # 
+#             # now reassign the targets to the datasets for transporting
+#             df_train = X_train
+#             df_train['desired'] = y_train
+#             
+#             df_valid = X_valid
+#             df_valid['desired'] = y_valid
+# 
+#             df_test = X_test
+#             df_test['desired'] = y_test
+#             list_train.append(df_train)
+#             list_valid.append(df_valid)
+#             list_test.append(df_test)
+#             
+#         return list_train, list_valid, list_test
+# =============================================================================
             
 
 
 
-    @classmethod
+    # @classmethod
     # =============================================================================
     # helper method that normalises the features of an np array of sequences returned by build_sequences
     # =============================================================================
@@ -246,7 +307,7 @@ class pre_processing_module:
 
     
     
-    @classmethod
+    # @classmethod
     # =============================================================================
     # @output returns a list of np.arrays containing the interpolated values for lat and long (currently - planning to expand to have other features)   
     # @params - vessel list is output of partition_vessels() method, target interval is the size of the time steps
@@ -257,9 +318,9 @@ class pre_processing_module:
         list_output = []
     
         for v in vessel_list:
-        
+            
             v.index = v['timestamp']
-            v = v.drop(columns=['timestamp'])
+            v.index.name = 'index'
 
             # invert boolean series to remove duplicates of timestamps
             v = v[~v.index.duplicated(keep='first')]
@@ -271,7 +332,8 @@ class pre_processing_module:
             # use linear interpolation to fill the gaps in the data
             v = v.interpolate(method='linear')
      
-            list_output_resampled.append(np.array(v.values)) # proper return value
+            # list_output_resampled.append(np.array(v.values)) # coverts to numpy array
+            list_output_resampled.append(v)
             self.list_df_resampled.append(v) # returns dataframe
             
         
@@ -280,41 +342,45 @@ class pre_processing_module:
         self.list_df = list_output
         return list_output_resampled
 
-        
-    @classmethod
+
+
+
+    # @classmethod
     # =============================================================================
     # segment into 24 hour windows by taking t_steps timesteps and putting them in a batch sequentially (all batches are spaced by t_steps)
     # @outputs a tensor of input values and a tensor of target values
     # =============================================================================
-    def fixed_window_tensor(self, interpolated_vessels, t_steps):
-        x_batches = []
-        y_batches = []
+    def fixed_window(self, interpolated_list, t_steps):
+        
+        batches = []
         t_steps = int(t_steps)
-        for v in interpolated_vessels:
+        drop_columns = ['mmsi', 'distance_from_shore', 'distance_from_port', 'course', 'speed', 'is_fishing']
+
+        
+        for i, df in enumerate(interpolated_list):
+            interpolated_list[i] = interpolated_list[i].drop(columns=drop_columns) # drop columns
+            interpolated_list[i] = np.array(interpolated_list[i].values) # convert to numpy array
+        
+        for v in interpolated_list:
             for i in range(0, len(v), t_steps):
                 # if the end of the vessel sequence isn't long enough we need to take some other values
                 if len(v[i:(i+t_steps), :]) < t_steps:
                     length_batch = len(v[i:(i+t_steps), :])
                     diff = t_steps - length_batch
-                    x_batches.append(v[i-diff:(i+t_steps), :-1])
-                    y_batches.append(v[i-diff:(i+t_steps), -1])
+                    batches.append(v[i-diff:(i+t_steps), :])
                 else:    
-                    x_batches.append(v[i:(i+t_steps), :-1])
-                    y_batches.append(v[i:(i+t_steps), -1])
+                    batches.append(v[i:(i+t_steps), :])
         #return torch.tensor(batches), batches
         # self.x_tensor = torch.tensor(x_batches)
-        self.x_batches = x_batches
-        self.y_batches = y_batches
-        return torch.tensor(x_batches), torch.tensor(y_batches)
+        return batches
 
 
-
-    @classmethod
+    # @classmethod
     # =============================================================================
     # segment into 24 hour windows that start one hour after each other incrementally ** more expesive than fixed_window_tensor
     # @outputs a tensor of input values and a tensor of target values
     # =============================================================================
-    def sliding_window_tensor(self, interpolated_vessels, t_steps, lag):
+    def sliding_window(self, interpolated_vessels, t_steps, lag):
         x_batches = []
         y_batches = []
         for v in interpolated_vessels:
@@ -336,7 +402,62 @@ class pre_processing_module:
         #return torch.tensor(x_batches), x_batches, torch.tensor(y_batches), y_batches
     
     
-    @classmethod
+    
+    
+    
+    # @classmethod
+    # =============================================================================
+    # method to return the linearly interpolated time series data in train, test and valid splits
+    # =============================================================================
+    def return_interpolated_data(self, time_interval, fixed_window):
+        
+        
+        
+        # variable dependant on what's required to make 24 hour batches
+        batch_size = 1440 / time_interval
+        lag = 3 #  lag to delay the sliding window
+        
+        vessel_list = self.partition_vessels()
+        interpolated_vessels = self.linear_interpolation(vessel_list=vessel_list, target_interval=time_interval)
+        
+        df_list = self.create_deltas(list_df=interpolated_vessels, interpolated=True)
+        
+        # return self.split_scale(df_list) # temp
+        
+        list_train, list_valid, list_test = self.split_scale(df_list)
+        
+        
+        
+        if fixed_window:
+            self.list_train_data = self.fixed_window(list_train, batch_size)
+            self.list_valid_data = self.fixed_window(list_valid, batch_size)
+            self.list_test_data = self.fixed_window(list_test, batch_size)
+        else:
+            self.list_train_data = self.sliding_window(list_train, batch_size)
+            self.list_valid_data = self.sliding_window(list_valid, batch_size)
+            self.list_test_data = self.sliding_window(list_test, batch_size)
+            
+        
+        print(f'Number of train sequences in the dataset: {len(self.list_train_data)}')
+        print(f'Number of val sequences in the dataset: {len(self.list_valid_data)}')
+        print(f'Number of test sequences in the dataset: {len(self.list_test_data)}')
+            
+        return self.list_train_data, self.list_valid_data, self.list_test_data
+            
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    # @classmethod
     # =============================================================================
     # method that automates the instantiation and building of the tensor 
     # @param time_interval: is in minues - how long the time windows will be
@@ -357,7 +478,7 @@ class pre_processing_module:
             return ppm.fixed_window_tensor(iv, batch_size)
     
     
-    @classmethod
+    # @classmethod
     # =============================================================================
     # helper method for data vis
     # =============================================================================
@@ -399,7 +520,7 @@ class pre_processing_module:
             plt.show()
 
         
-    @classmethod   
+    # @classmethod   
     # =============================================================================
     # method for examaning data upsampling ratios
     # =============================================================================
@@ -411,7 +532,7 @@ class pre_processing_module:
         print("size of all interpolated values:", size, "size of aggregate batches:", size_batches)
         
         
-    @classmethod
+    # @classmethod
     def return_size(self):
         return len(self.build_sequences())
 
@@ -429,7 +550,26 @@ class pre_processing_module:
 # =============================================================================
 # testing zone
 # =============================================================================
-# =============================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # 
 # ppm = pre_processing_module('purse_seines')
 # x_tensor, y_tensor = ppm.build_tensor(time_interval=15, sliding_window=False)

@@ -65,14 +65,12 @@ class GRU_wrapper():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     history = []
     # Hyperparameters
-    input_size = 5
+    input_size = 4
     n_classes = 6
     num_layers = 2
     hidden_size = 128
-    eta = 0.01
+    eta = 0.001
     
-    @classmethod
-    # =============================================================================
     # Instantiate model, set criterion and optimiser
     # =============================================================================
     def __init__(self, GRU_RNN):
@@ -81,10 +79,10 @@ class GRU_wrapper():
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.eta)
         
         # load data using class load_data.py, set to shuffled for now
-        self.data_loader = ld.data_loader()
+        self.data_loader = ld.data_loader('linear_interp', '1')
         self.train_data, self.valid_data, self.test_data = self.data_loader.load_shuffled()
         
-    @classmethod 
+    # @classmethod 
     def class_from_output(self, output, is_tensor):
         # print(output)
         if is_tensor:
@@ -93,7 +91,6 @@ class GRU_wrapper():
             class_index = int(output)
         return self.data_loader.return_classes()[class_index]
 
-    @classmethod
     # =============================================================================
     # training method for one sequence
     # =============================================================================
@@ -112,7 +109,6 @@ class GRU_wrapper():
         self.optimizer.step() # update the parameters based on the grad attribute calculated in the previous line
         return output, loss.item() # returning the last loss and predicted output of the sequence
 
-    @classmethod
     # =============================================================================
     # validation method for one sequence
     # =============================================================================
@@ -127,7 +123,6 @@ class GRU_wrapper():
             v_loss = self.criterion(output, target_tensor)
             return output, v_loss.item()
         
-    @classmethod
     # =============================================================================
     # Predictions
     # =============================================================================
@@ -175,11 +170,10 @@ class GRU_wrapper():
     
         return t_accuracies, test_loss
     
-    @classmethod
     # =============================================================================
     # Train model
     # =============================================================================
-    def fit(self, epochs, loss_limit, validate, verbose=True):
+    def fit(self, epochs, validate, verbose=True, loss_limit=0):
         self.model.eval()
         # helper variables
         # total_correct = 0
@@ -228,7 +222,7 @@ class GRU_wrapper():
 
                             
                 if (i + 1) % (print_steps) == 0:  
-                    print(f'Epoch {epoch}, training seq number: {i}, training loss = {loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
+                    print(f'Epoch {epoch}, training seq number: {i + 1}, training loss = {loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
                         
                 # for graphing
                 curr_t_loss += loss
@@ -257,7 +251,7 @@ class GRU_wrapper():
     
                                 
                     if (i + 1) % (print_steps) == 0:  
-                        print(f'Epoch {epoch}, val seq number: {i}, val loss = {v_loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
+                        print(f'Epoch {epoch}, val seq number: {i + 1}, val loss = {v_loss}, predicted vs actual: {correct} -> {guess} vs {actual}')
 
                     # for graphing
                     curr_v_loss += v_loss
@@ -272,7 +266,6 @@ class GRU_wrapper():
                 v_accuracies.append((v_correct_guesses / v_counter) * 100)
         self.history.append([accuracies, v_accuracies, train_loss, val_loss])
                     
-    @classmethod
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
@@ -280,7 +273,6 @@ class GRU_wrapper():
         torch.save(self.model.state_dict(), f'saved_models/{model_name}.pt')
         print(f'{model_name} state_dict successfully saved')
 
-    @classmethod
     # =============================================================================
     # method to load model from state_dict
     # =============================================================================
@@ -289,7 +281,6 @@ class GRU_wrapper():
         print(f'{model_name} state dictionary successfully loaded')
         print(self.model.eval())
 
-    @classmethod
     # =============================================================================
     # method to print params of model
     # =============================================================================
@@ -298,14 +289,12 @@ class GRU_wrapper():
         for p in params:
             print(p)
             
-    @classmethod
     # =============================================================================
     # returns history
     # =============================================================================            
     def return_history(self):
         return self.history
             
-    @classmethod
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================            
@@ -313,14 +302,33 @@ class GRU_wrapper():
         with open(f'pkl/GRU_RNN_v{version_number}_history.pkl', 'wb') as f:
             pickle.dump(self.history, f)
             print('History saved')
+            
+    # =============================================================================
+    # plot given metric
+    # =============================================================================
+    def plot(self, metric):
+        plt.figure()
+        plt.plot(metric)
+        plt.show()
 
 
 # =============================================================================
 # instantiate model and wrapper then train and save
 # =============================================================================
 model = GRU_wrapper(GRU_RNN)
-model.fit(epochs=10, loss_limit=0, validate=True, verbose=False)
-model.save_model('GRU_RNN_v4')
+model.fit(epochs=1, validate=True, verbose=False)
+# model.save_model('GRU_RNN_v4')
+# model.save_history('3')
+
+# history = model.return_history()
+# t_acc = history[0][0]
+# v_acc = history[0][1]
+# t_loss = history[0][2]
+# v_loss = history[0][3]
+
+# plt.figure()
+# plt.plot(t_acc)
+# plt.show()
 
 
 
@@ -342,7 +350,7 @@ tensor([-0.2460,  0.1251,  0.0764,  0.0246, -0.3283,  0.1671],
 # =============================================================================
 # model = GRU_wrapper(GRU_RNN)
 # model.load_model('GRU_RNN_v3')
-# model.predict()
+model.predict()
 
 """
 DOCUMENTATION: 
@@ -373,12 +381,12 @@ TEST 3:
     Model: GRU-RNN_v4 -> Hyperparameters:
         2 layered GRU with 128 hidden units
         1 layer fully connected with 128 units
-        Learning rate = 0.01 -> CHANGED
+        Learning rate = 0.001 -> CHANGED
         Optimiser = Adam
         Loss = CrossEntropyLoss    
     Data: Evenly distributed, uninterpolated, featurised, threshold for sequence length of 1 (must be greater), i.e. no threshold -> CHANGED
     RESULTS: 
-        Test accuracy on randomseed=15 
+        Test accuracy on randomseed=15  is 65.7%
         
   
     

@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 import pickle
 import torch
+from sklearn.preprocessing import StandardScaler
 
 import pre_processing_module as ppm
 
@@ -47,85 +48,60 @@ v2 DATA -> no threshold
         pole_and_line = 286
         trollers = 266
         
-Minimum value chosen for each
-
-New technique is to use ALL the data, instead of producing a balanced dataset
-
-FOR 1DCNN: Need to create even sequence sizes to serve as input for the 1DCNN. 
-    Also, batching should be introduced 
-
-
-
-
+        
+v3 DATA -> no datasize reduction, all data being preserved
 
 """
-train_max_length = 1742
-valid_max_length = 220
-test_max_length = 266
 
-max_seq_length = 0
 
-# =============================================================================
-# trolers
-# =============================================================================
+options = ['varying', 'padded', 'linear_interp']
+choice = 'linear_interp' # set choice
+version_num = 2 # version for filing system
+
+
+# instantiate ppm modules
 trollers_module = ppm.pre_processing_module('trollers')
-trollers_list_train_seq, trollers_list_valid_seq, trollers_list_test_seq = trollers_module.return_test_train_sets(train_max_length, valid_max_length, test_max_length)
-
-for l in trollers_list_train_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-for l in trollers_list_valid_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-for l in trollers_list_test_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-
-# =============================================================================
-# pole and line
-# =============================================================================
 pole_and_line_module = ppm.pre_processing_module('pole_and_line')
-pole_and_line_list_train_seq, pole_and_line_list_valid_seq, pole_and_line_list_test_seq = pole_and_line_module.return_test_train_sets(train_max_length, valid_max_length, test_max_length)
-for l in pole_and_line_list_train_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-for l in pole_and_line_list_valid_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-for l in pole_and_line_list_test_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-
-
-
-# =============================================================================
-# purse seines
-# =============================================================================
 purse_seine_module = ppm.pre_processing_module('purse_seines')
-purse_seine_list_train_seq, purse_seine_list_valid_seq, purse_seine_list_test_seq = purse_seine_module.return_test_train_sets(train_max_length, valid_max_length, test_max_length)
-
-
-
-# =============================================================================
-# fixed gear
-# =============================================================================
 fixed_gear_module = ppm.pre_processing_module('fixed_gear')
-fixed_gear_list_train_seq, fixed_gear_list_valid_seq, fixed_gear_list_test_seq = fixed_gear_module.return_test_train_sets(train_max_length, valid_max_length, test_max_length)
-
-
-
-# =============================================================================
-# trawlers
-# =============================================================================
 trawlers_module = ppm.pre_processing_module('trawlers')
-trawlers_list_train_seq, trawlers_list_valid_seq, trawlers_list_test_seq = trawlers_module.return_test_train_sets(train_max_length, valid_max_length, test_max_length)
-
-
-# =============================================================================
-# drifting longlines
-# =============================================================================
 drifting_longlines_module = ppm.pre_processing_module('drifting_longlines')
-drifting_longlines_list_train_seq, drifting_longlines_list_valid_seq, drifting_longlines_list_test_seq = drifting_longlines_module.return_test_train_sets(train_max_length, valid_max_length, test_max_length)
+
+
+if choice == 'varying':
+    print('Creating varying sequence sizes...')
+    trollers_list_train_seq, trollers_list_valid_seq, trollers_list_test_seq = trollers_module.return_test_train_sets(uniform=False) # varying
+    pole_and_line_list_train_seq, pole_and_line_list_valid_seq, pole_and_line_list_test_seq = pole_and_line_module.return_test_train_sets(uniform=False)
+    purse_seine_list_train_seq, purse_seine_list_valid_seq, purse_seine_list_test_seq = purse_seine_module.return_test_train_sets(uniform=False)
+    fixed_gear_list_train_seq, fixed_gear_list_valid_seq, fixed_gear_list_test_seq = fixed_gear_module.return_test_train_sets(uniform=False)
+    trawlers_list_train_seq, trawlers_list_valid_seq, trawlers_list_test_seq = trawlers_module.return_test_train_sets(uniform=False)
+    drifting_longlines_list_train_seq, drifting_longlines_list_valid_seq, drifting_longlines_list_test_seq = drifting_longlines_module.return_test_train_sets(uniform=False)
+
+    
+    
+if choice == 'uniform':
+    print('Creating uniform batch sizes...')
+    trollers_list_train_seq, trollers_list_valid_seq, trollers_list_test_seq = trollers_module.return_test_train_sets(uniform=True) # uniform
+    pole_and_line_list_train_seq, pole_and_line_list_valid_seq, pole_and_line_list_test_seq = pole_and_line_module.return_test_train_sets(uniform=True)
+    purse_seine_list_train_seq, purse_seine_list_valid_seq, purse_seine_list_test_seq = purse_seine_module.return_test_train_sets(uniform=True)
+    fixed_gear_list_train_seq, fixed_gear_list_valid_seq, fixed_gear_list_test_seq = fixed_gear_module.return_test_train_sets(uniform=True)
+    trawlers_list_train_seq, trawlers_list_valid_seq, trawlers_list_test_seq = trawlers_module.return_test_train_sets(uniform=True)
+    drifting_longlines_list_train_seq, drifting_longlines_list_valid_seq, drifting_longlines_list_test_seq = drifting_longlines_module.return_test_train_sets(uniform=True)
+
+
+if choice == 'linear_interp': # linear interpolation
+    print('Linear interpolation beginning...')
+    trollers_list_train_seq, trollers_list_valid_seq, trollers_list_test_seq = trollers_module.return_test_train_sets(uniform=False, interpolated=True) # linearly interpolated
+    pole_and_line_list_train_seq, pole_and_line_list_valid_seq, pole_and_line_list_test_seq = pole_and_line_module.return_test_train_sets(uniform=False, interpolated=True)
+    purse_seine_list_train_seq, purse_seine_list_valid_seq, purse_seine_list_test_seq = purse_seine_module.return_test_train_sets(uniform=False, interpolated=True)
+    fixed_gear_list_train_seq, fixed_gear_list_valid_seq, fixed_gear_list_test_seq = fixed_gear_module.return_test_train_sets(uniform=False, interpolated=True)
+    trawlers_list_train_seq, trawlers_list_valid_seq, trawlers_list_test_seq = trawlers_module.return_test_train_sets(uniform=False, interpolated=True)
+    drifting_longlines_list_train_seq, drifting_longlines_list_valid_seq, drifting_longlines_list_test_seq = drifting_longlines_module.return_test_train_sets(uniform=False, interpolated=True)
+    
+
+
+
+
 
 # =============================================================================
 # combine lists and save as np files
@@ -137,34 +113,53 @@ agg_list_test_seq = trollers_list_test_seq + pole_and_line_list_test_seq + purse
 
 
 
-# =============================================================================
-# Max sequence for batching when uniform batches are required as input for a network
-# max_seq_length will serve as the sequence size for ALL, before batching
-# =============================================================================
-for l in agg_list_train_seq: # finding the max sequence length for each training sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-for l in agg_list_valid_seq: # finding the max sequence length for each test sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
-for l in agg_list_test_seq: # finding the max sequence length for each valid sequence
-    if (max_seq_length < len(l)):
-        max_seq_length = len(l)
+if choice == 'linear_interp':
+    # they all need scaling together
+    def split_scale():
+        
+        batch_size = len(agg_list_valid_seq[0])
+        
+        # aggregate
+        main_train = np.concatenate(agg_list_train_seq)
+        main_valid = np.concatenate(agg_list_valid_seq)
+        main_test = np.concatenate(agg_list_test_seq)
+        
+        # scale
+        scaler = StandardScaler()
+        main_train[:, :-1] = scaler.fit_transform(main_train[:, :-1])
+        main_valid[:, :-1] = scaler.transform(main_valid[:, :-1])
+        main_test[:, :-1] = scaler.transform(main_test[:, :-1])
+        
+        # rebatch and convert nans
+        main_train = np.nan_to_num(main_train)
+        main_valid = np.nan_to_num(main_valid)
+        main_test = np.nan_to_num(main_test)
+        
+        main_train = np.split(main_train, len(main_train)/batch_size)
+        main_valid = np.split(main_valid, len(main_valid)/batch_size)
+        main_test = np.split(main_test, len(main_test)/batch_size)
+        
+        return main_train, main_valid, main_test
+        
+    agg_list_train_seq, agg_list_valid_seq, agg_list_test_seq = split_scale()
 
 
 
 
+if (choice == 'varying'):
+    max_seq_length = 0
+    for item in agg_list_train_seq:
+        if max_seq_length < len(item):
+            max_seq_length = len(item)
+    print(f'max sequence length is {max_seq_length}')
+        
 
 # save
-with open('../../data/pkl/varying_seq_length/train_v3.pkl', 'wb') as f:
+with open(f'../../data/pkl/{choice}/train_v{version_num}.pkl', 'wb') as f:
     pickle.dump(agg_list_train_seq, f)
-
-with open('../../data/pkl/varying_seq_length/valid_v3.pkl', 'wb') as f:
+with open(f'../../data/pkl/{choice}/valid_v{version_num}.pkl', 'wb') as f:
     pickle.dump(agg_list_valid_seq, f)
-
-with open('../../data/pkl/varying_seq_length/test_v3.pkl', 'wb') as f:
+with open(f'../../data/pkl/{choice}/test_v{version_num}.pkl', 'wb') as f:
     pickle.dump(agg_list_test_seq, f)
-
-
-
-
+    
+print(f'Saved files successfully')
