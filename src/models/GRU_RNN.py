@@ -5,7 +5,9 @@ Created on Sat Nov 12 17:57:44 2022
 
 @author: benedict
 
-Script for building and training a GRU-RNN
+Script for building and training a GRU-RNN for varying length time sequences 
+
+
 """
 import torch
 import torch.nn as nn

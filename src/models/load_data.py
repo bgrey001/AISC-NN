@@ -55,11 +55,11 @@ class data_loader():
    
     # @classmethod
     # =============================================================================
-    # shuffle the sequences for each epoch
+    # shuffle the sequences in a given list
     # =============================================================================
-    def shuffle_data(self, train_data):
-        random.shuffle(train_data)
-        return train_data
+    def shuffle_data(self, data):
+        random.shuffle(data)
+        return data
     
     
     # @classmethod
@@ -160,121 +160,3 @@ class data_loader():
 # data_train, data_valid, data_test = dl.load_shuffled()
 
 
-# for item in data_train:
-#     i, o = dl.cnn_seq(item)
-#     break
-
-
-    
-# print(i)
-
-
-
-
-# dl = data_loader(choice='varying', version='3')
-# data_train, data_valid, data_test = dl.load_shuffled()
-
-
-# for item2 in data_train:
-#     i1, o1 = dl.cnn_seq(item)
-#     break
-
-
-    
-# print(i1)
-
-# print(input_tensor)
-
-
-
-# def seq_to_tensor(item): 
-#     tensor = torch.zeros(len(item), 1, num_features)
-#     for i, letter in enumerate(item): # the enumerate() function adds a counter as the key of tghe enumerate object (for iterating through tuples when access to an index is needed)
-#         tensor[i][0][:] = torch.tensor(item[0, :])
-#     return tensor
-
-# input_tensor, target_tensor = seq_to_tensor(seq)
-
-
-# =============================================================================
-# 
-# def target_to_tensor(seq):
-#     tensor = torch.zeros(len(seq), n_features)
-#     
-#     
-# def generate_input_target_tensors(seq_list):
-# =============================================================================
-    
-# =============================================================================
-# now we train
-# =============================================================================
-    
-# current_loss = 0
-# all_losses = []
-
-# total_correct = 0
-
-# plot_steps, print_steps = 1000, 1000
-# n_epochs = 100
-
-# for i in range(n_epochs):
-#     # category, line, category_tensor, line_tensor = random_training_example(category_lines=category_lines, all_categories=all_categories)
-    
-#     # line_tensor is one word or sequence, category tensor is one sequence lengths of targets
-#     for seq in train_seq_list:
-#         input_tensor, target_tensor = seq_to_tensor(seq)
-        
-#         # need to get line tensor and category tensor
-        
-#         output, loss = train(input_tensor.to('cuda'), target_tensor.to('cuda'))
-#         current_loss += loss
-        
-#         if (i + 1) % plot_steps == 0:
-#             all_losses.append(current_loss / plot_steps) # taking averages
-#             current_loss = 0
-            
-#         if (i + 1) % print_steps == 0:
-#             guess = category_from_output(output)
-#             correct = "CORRECT" if guess == category else f"WRONG ({category})"
-#         #         print(f'{i} {i/n_iterations*100} {loss:.4f} {line} / {guess} {correct}')
-#             print(f'{i} {loss:.4f} {line} / {guess} {correct}')
-            
-        
-    
-    
-    
-    
-
-
-# =============================================================================
-# function for converting nparrays of individual sequences into tensors to serve as input for RNNs
-# item = pole_and_line_list_test_seq[1]
-# num_features = 6
-# 
-# 
-# def seq_to_tensor(item): 
-#     tensor = torch.zeros(len(item), 1, num_features)
-#     for i, letter in enumerate(item): # the enumerate() function adds a counter as the key of tghe enumerate object (for iterating through tuples when access to an index is needed)
-#         tensor[i][0][:] = torch.tensor(item[0, :])
-#     return tensor
-# 
-# input_tensor = seq_to_tensor(item)
-# print(input_tensor)
-# =============================================================================
-
-
-
-    
-    
-    
-    
-    
-# =============================================================================
-# total number of inputs
-# sum = 0
-# 
-# for item in train_seq_list:
-#     sum += len(item)
-#     
-# print(sum)
-# =============================================================================
