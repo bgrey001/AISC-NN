@@ -35,6 +35,8 @@ class CNN_1D(nn.Module):
     # class attributes
     # =============================================================================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = ('cpu')
+
 
     # =============================================================================
     # constructor
@@ -47,40 +49,27 @@ class CNN_1D(nn.Module):
         conv_L3 = 2 * conv_L2
 
         # conv layers 1
-        self.batch_norm_1 = nn.BatchNorm1d(n_features)
-        self.dropout_1 = nn.Dropout(0.1)
-        # self.conv_1 = nn.utils.weight_norm(nn.Conv1d(
-        #     in_channels=n_features, out_channels=conv_L1, kernel_size=kernel_size))
-        # self.relu_1 = nn.ReLU()
-        # self.pool_1 = nn.MaxPool1d(pool_size)
+        # self.batch_norm_1 = nn.BatchNorm1d(n_features)
+        # self.dropout_1 = nn.Dropout(0.1)
 
         self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_L1, kernel_size=kernel_size)
         self.relu_1 = nn.ReLU()
         self.pool_1 = nn.MaxPool1d(pool_size)    
 
         # conv layers 2
-        # self.batch_norm_2 = nn.BatchNorm1d(conv_L1)
-        # self.dropout_2 = nn.Dropout(0.1)
-        # self.conv_2 = nn.utils.weight_norm(
-        #     nn.Conv1d(in_channels=conv_L1, out_channels=conv_L2, kernel_size=kernel_size))
-        # self.relu_2 = nn.ReLU()
-        # self.pool_2 = nn.MaxPool1d(pool_size)
-        # self.conv_2 = nn.Conv1d(in_channels=conv_L1, out_channels=conv_L2, kernel_size=kernel_size)
-        # self.relu_2 = nn.ReLU()
-        # self.pool_2 = nn.MaxPool1d(pool_size)
+        self.batch_norm_2 = nn.BatchNorm1d(conv_L1)
+        self.dropout_2 = nn.Dropout(0.1)
+        self.conv_2 = nn.Conv1d(in_channels=conv_L1, out_channels=conv_L2, kernel_size=kernel_size)
+        self.relu_2 = nn.ReLU()
+        self.pool_2 = nn.MaxPool1d(pool_size)
 
         # conv layers 3
-        # self.batch_norm_3 = nn.BatchNorm1d(conv_L2)
-        # self.dropout_3 = nn.Dropout(0.1)
-        # self.conv_3 = nn.utils.weight_norm(
-            # nn.Conv1d(in_channels=conv_L2, out_channels=conv_L3, kernel_size=kernel_size))
-        # self.relu_3 = nn.ReLU()
-        # self.pool_3 = nn.MaxPool1d(pool_size)
+        self.batch_norm_3 = nn.BatchNorm1d(conv_L2)
+        self.dropout_3 = nn.Dropout(0.1)
+        self.conv_3 = nn.utils.weight_norm(nn.Conv1d(in_channels=conv_L2, out_channels=conv_L3, kernel_size=kernel_size))
+        self.relu_3 = nn.ReLU()
+        self.pool_3 = nn.MaxPool1d(pool_size)
 
-        # configure transformed dimensions of the input as it reaches the fully connected layer
-        # conv_L3_dim = math.floor((math.floor((math.floor((seq_length - (kernel_size - 1)) /
-        #                          pool_size) - (kernel_size - 1)) / pool_size) - (kernel_size - 1)) / pool_size)
-        # flat_size = conv_L3 * conv_L3_dim
         
         
         conv_L1_dim = math.floor((seq_length - (kernel_size - 1))/ pool_size)
@@ -97,9 +86,9 @@ class CNN_1D(nn.Module):
         # self.fc_3 = nn.Linear(256, 128)
         # self.fc_4 = nn.Linear(128, n_classes)
 
-        self.fc_1 = nn.Linear(flat_size, 64)
-        self.fc_2 = nn.Linear(64, 6)
-        # self.fc_3 = nn.Linear(64, 6)
+        self.fc_1 = nn.Linear(flat_size, 128)
+        self.fc_2 = nn.Linear(128, 64)
+        self.fc_3 = nn.Linear(64, n_classes)
         self.softmax = nn.LogSoftmax(dim=1)
 
     # =============================================================================
@@ -116,25 +105,24 @@ class CNN_1D(nn.Module):
         input_x = self.pool_1(input_x)
 
         # conv layers 2
-        # input_x = self.batch_norm_2(input_x)
-        # input_x = self.dropout_2(input_x)
-        # input_x = self.conv_2(input_x)
-        # input_x = self.relu_2(input_x)
-        # input_x = self.pool_2(input_x)
+        input_x = self.batch_norm_2(input_x)
+        input_x = self.dropout_2(input_x)
+        input_x = self.conv_2(input_x)
+        input_x = self.relu_2(input_x)
+        input_x = self.pool_2(input_x)
 
         # # conv layers 3
-        # input_x = self.batch_norm_3(input_x)
-        # input_x = self.dropout_3(input_x)
-        # input_x = self.conv_3(input_x)
-        # input_x = self.relu_3(input_x)
-        # input_x = self.pool_3(input_x)
+        input_x = self.batch_norm_3(input_x)
+        input_x = self.dropout_3(input_x)
+        input_x = self.conv_3(input_x)
+        input_x = self.relu_3(input_x)
+        input_x = self.pool_3(input_x)
 
         # flatten and prediction layers
         input_x = self.flatten(input_x)
         input_x = F.relu(self.fc_1(input_x))
         input_x = F.relu(self.fc_2(input_x))
-        # input_x = F.relu(self.fc_3(input_x))
-        # input_x = self.fc_3(input_x)
+        input_x = F.relu(self.fc_3(input_x))
         output = self.softmax(input_x)
 
         return output
@@ -152,8 +140,7 @@ class CNN_1D_wrapper():
 
     version_number = 0
 
-    history = {'training_accuracy': [], 'training_loss': [], 'validation_accuracy': [
-    ], 'validation_loss': [], 'test_accuracy': [], 'test_loss': []}
+    history = {'training_accuracy': [], 'training_loss': [], 'validation_accuracy': [], 'validation_loss': [], 'test_accuracy': [], 'test_loss': []}
     training_losses = []
     validation_losses = []
     test_losses = []
@@ -182,7 +169,7 @@ class CNN_1D_wrapper():
     epochs = 10
     optim_name = ''
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
     def __init__(self, CNN_1D, optimizer):
 
@@ -203,9 +190,9 @@ class CNN_1D_wrapper():
         self.optim_name = optimizer
         self.criterion = nn.CrossEntropyLoss()
 
-        self.data_loader = ld.data_loader(
-            choice=self.datatype, version=self.data_ver)
-        self.train_data, self.valid_data, self.test_data = self.data_loader.load_shuffled()
+        # self.data_loader = ld.data_loader(
+        #     choice=self.datatype, version=self.data_ver)
+        # self.train_data, self.valid_data, self.test_data = self.data_loader.load_shuffled()
 
     def class_from_output(self, output, is_tensor):
         # print(output)
@@ -514,19 +501,21 @@ class CNN_1D_wrapper():
 # =============================================================================
 # instantiate model and wrapper then train and save
 # =============================================================================
-model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
-model.fit(validate=True)
-model.predict()
-# print(model.history)
-# model.save_model('8')
+# model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
+# model.fit(validate=True)
+# model.predict()
+# # print(model.history)
+# model.save_model('9')
 # model.print_summary()
-# model.plot('training_accuracy')
+# model.plot('validation_accuracy')
 
 
 # =============================================================================
 # instantiate model and wrapper then load
 # =============================================================================
-# model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
+model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
+model.load_history('1')
+
 # model.load_model('8')
 # model.predict()
 # model.print_summary()

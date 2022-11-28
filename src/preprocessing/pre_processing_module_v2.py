@@ -15,7 +15,7 @@ from numpy import random
 import pandas as pd
 
 import warnings
-from pandas.core.common import SettingWithCopyWarning
+# from pandas.core.common import SettingWithCopyWarning
 
 import dask.dataframe as dd
 
@@ -26,7 +26,7 @@ from sklearn.preprocessing import MinMaxScaler, Normalizer, StandardScaler
 from sklearn.model_selection import train_test_split
 from datetime import datetime, timedelta
 
-warnings.simplefilter(action="ignore", category=SettingWithCopyWarning) # ignore warning for creating views instead of copies
+# warnings.simplefilter(action="ignore", category=SettingWithCopyWarning) # ignore warning for creating views instead of copies
 
 class pre_processing_module:
     

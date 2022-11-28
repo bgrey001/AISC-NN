@@ -13,7 +13,6 @@ import pandas as pd
 import numpy as np
 from numpy import random
 import matplotlib.pyplot as plt
-import pre_processing_module as ppm1
 import pre_processing_module_v2 as ppm2
 import dask.dataframe as dd
 import pickle
@@ -26,15 +25,15 @@ from sklearn.preprocessing import MinMaxScaler, Normalizer, StandardScaler
 
 # from dask_ml.model_selection import train_test_split
 
-version = 1
+version = 99
 choice = 'varying'
 
 troller_module = ppm2.pre_processing_module('trollers')
-pole_module = ppm2.pre_processing_module('pole_and_line') 
-purse_module = ppm2.pre_processing_module('purse_seines') 
-fixed_module = ppm2.pre_processing_module('fixed_gear') 
-trawlers_module = ppm2.pre_processing_module('trawlers') 
-drifting_module = ppm2.pre_processing_module('drifting_longlines') 
+# pole_module = ppm2.pre_processing_module('pole_and_line') 
+# purse_module = ppm2.pre_processing_module('purse_seines') 
+# fixed_module = ppm2.pre_processing_module('fixed_gear') 
+# trawlers_module = ppm2.pre_processing_module('trawlers') 
+# drifting_module = ppm2.pre_processing_module('drifting_longlines') 
 
 
 # =============================================================================
@@ -47,46 +46,46 @@ match choice:
         time_period = 24
         threshold = 1
         saving_parquet = False
-        saving = False
+        saving = True
         
         aggregate_mask = []
         drop_columns = ['mmsi', 'distance_from_shore', 'distance_from_port', 'delta_t_cum', 'course', 'is_fishing', 'delta_t', 'desired', 'timestamp']
         
         # trollers, order matters here!
         troller_list_df = troller_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
-        troller_df, troller_mask = troller_module.flatten_df_list(troller_list_df)
+        troller_df, troller_mask = troller_module.flatten_df_list(troller_list_df, nested_list=True)
         aggregate_mask += troller_mask
         aggregate_df = dd.from_pandas(troller_df, npartitions=1)
         
-        # pole and line
-        pole_list_df = pole_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
-        pole_df, pole_mask = pole_module.flatten_df_list(pole_list_df)
-        aggregate_mask += pole_mask
-        aggregate_df = dd.concat([aggregate_df, pole_df])
+        # # pole and line
+        # pole_list_df = pole_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
+        # pole_df, pole_mask = pole_module.flatten_df_list(pole_list_df, nested_list=False)
+        # aggregate_mask += pole_mask
+        # aggregate_df = dd.concat([aggregate_df, pole_df])
         
-        # purse seines
-        purse_list_df = purse_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
-        purse_df, purse_mask = purse_module.flatten_df_list(purse_list_df)
-        aggregate_mask += purse_mask
-        aggregate_df = dd.concat([aggregate_df, purse_df])
+        # # purse seines
+        # purse_list_df = purse_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
+        # purse_df, purse_mask = purse_module.flatten_df_list(purse_list_df, nested_list=False)
+        # aggregate_mask += purse_mask
+        # aggregate_df = dd.concat([aggregate_df, purse_df])
         
-        # fixed gear
-        fixed_list_df = fixed_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
-        fixed_df, fixed_mask = fixed_module.flatten_df_list(fixed_list_df)
-        aggregate_mask += fixed_mask
-        aggregate_df = dd.concat([aggregate_df, fixed_df])
+        # # fixed gear
+        # fixed_list_df = fixed_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
+        # fixed_df, fixed_mask = fixed_module.flatten_df_list(fixed_list_df, nested_list=False)
+        # aggregate_mask += fixed_mask
+        # aggregate_df = dd.concat([aggregate_df, fixed_df])
         
-        # trawlers
-        trawlers_list_df = trawlers_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
-        trawlers_df, trawlers_mask = trawlers_module.flatten_df_list(trawlers_list_df)
-        aggregate_mask += trawlers_mask
-        aggregate_df = dd.concat([aggregate_df, trawlers_df])
+        # # trawlers
+        # trawlers_list_df = trawlers_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
+        # trawlers_df, trawlers_mask = trawlers_module.flatten_df_list(trawlers_list_df, nested_list=False)
+        # aggregate_mask += trawlers_mask
+        # aggregate_df = dd.concat([aggregate_df, trawlers_df])
         
-        # drifting longlines
-        drifting_list_df = drifting_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
-        drifting_df, drifting_mask = drifting_module.flatten_df_list(drifting_list_df)
-        aggregate_mask += drifting_mask
-        aggregate_df = dd.concat([aggregate_df, drifting_df])
+        # # drifting longlines
+        # drifting_list_df = drifting_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
+        # drifting_df, drifting_mask = drifting_module.flatten_df_list(drifting_list_df, nested_list=False)
+        # aggregate_mask += drifting_mask
+        # aggregate_df = dd.concat([aggregate_df, drifting_df])
         
         
         # =============================================================================
@@ -115,7 +114,6 @@ match choice:
         
         # find max sequence length for padding process
         len_max_seq = max(df_list)
-        break
         
         # now shuffle
         random.shuffle(df_list)
