@@ -152,8 +152,7 @@ class CNN_1D_wrapper():
 
     version_number = 0
 
-    history = {'training_accuracy': [], 'training_loss': [], 'validation_accuracy': [
-    ], 'validation_loss': [], 'test_accuracy': [], 'test_loss': []}
+    history = {'training_accuracy': [], 'training_loss': [], 'validation_accuracy': [], 'validation_loss': [], 'test_accuracy': [], 'test_loss': []}
     training_losses = []
     validation_losses = []
     test_losses = []
@@ -164,11 +163,8 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    n_features = 4
-    n_classes = 6
-    seq_length = 180
     datatype = 'linear_interp'
-    data_ver = '3'
+    data_ver = '2'
     # =============================================================================
     # Hyperparameters
     # =============================================================================
@@ -185,6 +181,16 @@ class CNN_1D_wrapper():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def __init__(self, CNN_1D, optimizer):
+        
+        # load data attributes
+        self.data_loader = ld.data_loader(choice=self.datatype, version=self.data_ver)
+        self.train_data, self.valid_data, self.test_data = self.data_loader.load_shuffled()
+        # self.n_features = self.data_loader.n_features
+        self.n_features = 4
+        # self.n_classes = self.data_loader.n_classes
+        self.n_classes = 6
+        # self.seq_length = self.data_loader.seq_length
+        self.seq_length = 180
 
         self.model = CNN_1D(n_features=self.n_features, n_classes=self.n_classes, seq_length=self.seq_length,
                             conv_L1=self.conv_L1,  kernel_size=self.kernel_size, pool_size=self.pool_size).to(self.device)
@@ -203,10 +209,8 @@ class CNN_1D_wrapper():
         self.optim_name = optimizer
         self.criterion = nn.CrossEntropyLoss()
 
-        self.data_loader = ld.data_loader(
-            choice=self.datatype, version=self.data_ver)
-        self.train_data, self.valid_data, self.test_data = self.data_loader.load_shuffled()
 
+    
     def class_from_output(self, output, is_tensor):
         # print(output)
         if is_tensor:
@@ -230,10 +234,8 @@ class CNN_1D_wrapper():
         valid_loss = 0
 
         # load data
-        train_batches = self.data_loader.load_batch_shuffled(
-            data_list=self.train_data, batch_size=self.batch_size)
-        valid_batches = self.data_loader.load_batch_shuffled(
-            data_list=self.valid_data, batch_size=self.batch_size)
+        train_batches = self.data_loader.load_batch_shuffled(data_list=self.train_data, batch_size=self.batch_size)
+        valid_batches = self.data_loader.load_batch_shuffled(data_list=self.valid_data, batch_size=self.batch_size)
 
         # per epoch, there will be a training loop through all the trianing data followed by a validation loop through all the validation data
         for epoch in range(self.epochs):
@@ -253,13 +255,11 @@ class CNN_1D_wrapper():
             for i, batch in enumerate(train_batches):
                 self.model.train()
                 # forward propagation
-                input_tensor, target_tensor = self.data_loader.batch_cnn_seq(
-                    batch)
+                input_tensor, target_tensor = self.data_loader.batch_seq(batch)
                 input_tensor = input_tensor.float()
                 output = self.model(input_tensor.to(self.device))
                 # convert target tensor to LongTensor for compatibility
-                target_tensor = target_tensor.type(
-                    torch.LongTensor).to(self.device)
+                target_tensor = target_tensor.type(torch.LongTensor).to(self.device)
 
                 # backpropagation
                 self.optimizer.zero_grad()
@@ -276,8 +276,7 @@ class CNN_1D_wrapper():
                     train_loss_counter += 1
                     train_loss += loss.item()
 
-            train_accuracy = 100 * \
-                (correct / (len(train_batches) * self.batch_size))
+            train_accuracy = 100 * (correct / (len(train_batches) * self.batch_size))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
             print("========================================================================================================================================================== \n" +
@@ -403,7 +402,6 @@ class CNN_1D_wrapper():
             f'CNN_1D_v{self.version_number} state dictionary successfully loaded')
         self.load_history(version_number)
 
-    # @classmethod
     # =============================================================================
     # method to print params of model
     # =============================================================================
@@ -413,14 +411,12 @@ class CNN_1D_wrapper():
         for p in params:
             print(p)
 
-    # @classmethod
     # =============================================================================
     # returns history
     # =============================================================================
     def return_history(self):
         return self.history
 
-    # @classmethod
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
@@ -515,8 +511,9 @@ class CNN_1D_wrapper():
 # instantiate model and wrapper then train and save
 # =============================================================================
 model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
+print(model.seq_length)
 model.fit(validate=True)
-model.predict()
+# model.predict()
 # print(model.history)
 # model.save_model('8')
 # model.print_summary()

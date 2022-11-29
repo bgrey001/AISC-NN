@@ -214,24 +214,16 @@ class pre_processing_module:
        
         drop_columns = ['mmsi', 'timestamp', 'distance_from_shore', 'distance_from_port', 'delta_t', 'delta_t_cum', 'course', 'speed']
         
-        max_seq_length = 1887 # this should be set the largest sequence length in all the datasets
         threshold = 150 # this is the minimum that a sequence can be to be included in the dataset
         time_period = 24 # this is the length of each time window in hours
         
         
-        df = self.partition_vessels()
-        df_list = self.create_deltas(list_df=df, interpolated=False)
-        list_train, list_valid, list_test = self.split(df_list)
+        # df = self.partition_vessels()
+        # df_list = self.create_deltas(list_df=df, interpolated=False)
+        # list_train, list_valid, list_test = self.split(df_list)
 
-        list_train_seq = self.build_sequences(list_df=list_train, time_period=time_period, threshold=threshold, max_seq_length=max_seq_length, uniform=uniform, drop_columns=drop_columns)
-        list_valid_seq = self.build_sequences(list_df=list_valid, time_period=time_period, threshold=threshold, max_seq_length=max_seq_length, uniform=uniform, drop_columns=drop_columns)
-        list_test_seq = self.build_sequences(list_df=list_test, time_period=time_period, threshold=threshold, max_seq_length=max_seq_length, uniform=uniform, drop_columns=drop_columns)
-
-        print(f'Number of train sequences in the dataset: {len(list_train_seq)}')
-        print(f'Number of val sequences in the dataset: {len(list_valid_seq)}')
-        print(f'Number of test sequences in the dataset: {len(list_test_seq)}')
         
-        return list_train_seq, list_valid_seq, list_test_seq
+        # return list_train_seq, list_valid_seq, list_test_seq
         
     
 
