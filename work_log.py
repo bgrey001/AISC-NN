@@ -49,6 +49,7 @@ Rebuilt data pipeline due to memory constraints with the load_data class.
 Fine tuning CNN class, using a K random parameter initialisation technique to explore the multi model error landscape and find the best starting parameters to then do more extensive training, starting with those parameters
 
 
+
     
 BACKLOG:
 ------------------------------------------------>

@@ -17,8 +17,18 @@ import numpy as np
 import random
 import pickle
 
+import matplotlib.pyplot as plt
 
 class AIS_loader(Dataset):
+    
+# =============================================================================
+#     structure of input: list of sequences (shuffled already)
+#     each sequence is: sequence length x features
+#     feature columns: speed, lat, lon, time_delta, course_delta
+# =============================================================================
+    
+        
+        
     
     def __init__(self, choice, split, version, split_2=None):
         random.seed(15) # set random seed to reproduce random results
@@ -75,27 +85,13 @@ class AIS_loader(Dataset):
 # testing zone
 # =============================================================================
 
-# dataset = AIS_loader(choice='varying', split='train', version=2, split_2='valid')
-# list_ = dataset.seq_list 
+dataset = AIS_loader(choice='varying', split='train', version=3)
+seq_list = dataset.seq_list
 
+single = seq_list[14705]
+plt.plot(single[:, 1], single[:, 2])
+plt.scatter(single[:, 1], single[:, 2], s=8)
 
-# dataloader = DataLoader(dataset=dataset, batch_size=256, shuffle=False, collate_fn=dataset.CNN_collate)
-
-# i = 0
-# for x, y, z in dataloader:
-#     if len(x) != 256:
-#         print('wrong size')
-#     i += 1
-
-# x0 = dataset.seq_list[0]
-# x = next(iter(dataset))
-# x1 = len(next(iter(dataloader))[0])
-# y1 = next(iter(dataloader))[1]
-# y1 = y1.numpy()
-# x1 = torch.transpose(input=x1, dim0=2, dim1=1)
-# x1 = x1.numpy()
-
-# total = 256 * 2931 * 852
 
 
 

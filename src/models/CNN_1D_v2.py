@@ -24,10 +24,45 @@ from torch.utils.data import Dataset, DataLoader
 import AIS_loader as data_module
 
 
+
+
+
+
 # =============================================================================
-# model class inherits from torch Module class
+# custom ResidualBlock
 # =============================================================================
-class CNN_1D(nn.Module):
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super(ResBlock, self).__init__()
+        
+        self.conv_1 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=1)
+        self.batch_norm_1 = nn.BatchNorm1d(out_channels)
+
+        self.conv_2 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=1)
+        self.batch_norm_2 = nn.BatchNorm1d(out_channels)
+        
+        self.relu = nn.LeakyReLU()
+        
+    def forward(self, input_x):
+        
+        residual = input_x
+        input_x = self.conv_1(input_x)
+        input_x = self.batch_norm_1(input_x)
+        input_x = self.relu(input_x)
+        
+        input_x = self.conv_2(input_x)
+        input_x = self.batch_norm_2(input_x)
+        input_x = self.relu(input_x)
+        
+        input_x += residual
+        output = self.relu(input_x)
+        return output
+        
+
+
+
+
+class CNN_1D_v2(nn.Module):
 
     # =============================================================================
     # class attributes
@@ -37,42 +72,128 @@ class CNN_1D(nn.Module):
     # =============================================================================
     # constructor
     # =============================================================================
-    def __init__(self, n_features, n_classes, seq_length, conv_L1, kernel_size, pool_size):
-        super(CNN_1D, self).__init__()
+    def __init__(self, n_features, n_classes, seq_length, conv_l1, kernel_size, pool_size):
+        super(CNN_1D_v2, self).__init__()
 
         # calculate channel sizes for the different convolution layers
-        conv_L2 = 2 * conv_L1
-        conv_L3 = 2 * conv_L2
+        conv_l2 = 2 * conv_l1
+        conv_l3 = 2 * conv_l2
+        
+        self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_l1, kernel_size=kernel_size)
+        self.batch_norm_1 = nn.BatchNorm1d(conv_l1)
+        self.relu = nn.ReLU()
+        self.maxpool = nn.MaxPool1d(pool_size)    
+
+        self.res_block_1 = ResBlock(in_channels=conv_l1, out_channels=conv_l1, kernel_size=kernel_size)
+        self.res_block_2 = ResBlock(in_channels=conv_l1, out_channels=conv_l1, kernel_size=kernel_size)
+        self.avgpool = nn.AvgPool1d(pool_size)    
+        
+        self.conv_2 = nn.Conv1d(in_channels=conv_l1, out_channels=conv_l2, kernel_size=kernel_size)
+        self.batch_norm_2 = nn.BatchNorm1d(conv_l2)
+
+        
+        # configure transformed dimensions of the input as it reaches the fully connected layer
+        conv_l1_dim = math.floor((seq_length - (kernel_size - 1))/ pool_size)
+        conv_l2_dim = math.floor((conv_l1_dim - (kernel_size - 1)) / pool_size)
+        # conv_l3_dim = math.floor((conv_l2_dim - (kernel_size - 1)) / pool_size)
+        
+        # flat_size = conv_l1 * conv_l1_dim
+        # flat_size = (conv_l2 * conv_l2_dim)
+        flat_size = (conv_l2 * conv_l2_dim)
+        flat_size = (flat_size // 2) - conv_l1
+
+        # flatten and prediction layers
+        self.flatten = nn.Flatten()
+        self.fc_1 = nn.Linear(flat_size, 128)
+        self.fc_2 = nn.Linear(128, 64)
+        self.fc_3 = nn.Linear(64, n_classes)
+        self.softmax = nn.LogSoftmax(dim=1)
+        
+
+
+
+    def forward(self, input_x):
+        
+        input_x = self.conv_1(input_x)
+        input_x = self.batch_norm_1(input_x)
+        input_x = self.maxpool(self.relu(input_x))
+        
+        input_x = self.res_block_1(input_x)
+        input_x = self.res_block_2(input_x)
+        input_x = self.avgpool(input_x)
+        
+        input_x = self.conv_2(input_x)
+        input_x = self.batch_norm_2(input_x)
+        input_x = self.maxpool(self.relu(input_x))
+        
+        input_x = self.flatten(input_x)
+        input_x = F.relu(self.fc_1(input_x))
+        input_x = F.relu(self.fc_2(input_x))
+        input_x = F.relu(self.fc_3(input_x))
+        output = self.softmax(input_x)
+        
+        return output
+        
+
+
+
+
+
+
+# =============================================================================
+# model class inherits from torch Module class
+# =============================================================================
+class CNN_1D_v1(nn.Module):
+
+    # =============================================================================
+    # class attributes
+    # =============================================================================
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # =============================================================================
+    # constructor
+    # =============================================================================
+    def __init__(self, n_features, n_classes, seq_length, conv_l1, kernel_size, pool_size):
+        super(CNN_1D_v1, self).__init__()
+
+        # calculate channel sizes for the different convolution layers
+        conv_l2 = 2 * conv_l1
+        conv_l3 = 2 * conv_l2
+        conv_l4 = 2 * conv_l3
 
         # conv layers 1
         self.batch_norm_1 = nn.BatchNorm1d(n_features)
-        self.dropout_1 = nn.Dropout(0.1)
-        self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_L1, kernel_size=kernel_size)
+        self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_l1, kernel_size=kernel_size)
         self.relu_1 = nn.ReLU()
         self.pool_1 = nn.MaxPool1d(pool_size)    
 
         # conv layers 2
-        self.batch_norm_2 = nn.BatchNorm1d(conv_L1)
-        self.dropout_2 = nn.Dropout(0.1)
-        self.conv_2 = nn.utils.weight_norm(nn.Conv1d(in_channels=conv_L1, out_channels=conv_L2, kernel_size=kernel_size))
+        self.batch_norm_2 = nn.BatchNorm1d(conv_l1)
+        self.conv_2 = nn.utils.weight_norm(nn.Conv1d(in_channels=conv_l1, out_channels=conv_l2, kernel_size=kernel_size))
         self.relu_2 = nn.ReLU()
         self.pool_2 = nn.MaxPool1d(pool_size)
 
 
         # conv layers 3
-        self.batch_norm_3 = nn.BatchNorm1d(conv_L2)
-        self.dropout_3 = nn.Dropout(0.1)
-        self.conv_3 = nn.utils.weight_norm(nn.Conv1d(in_channels=conv_L2, out_channels=conv_L3, kernel_size=kernel_size))
+        self.batch_norm_3 = nn.BatchNorm1d(conv_l2)
+        self.conv_3 = nn.utils.weight_norm(nn.Conv1d(in_channels=conv_l2, out_channels=conv_l3, kernel_size=kernel_size))
         self.relu_3 = nn.ReLU()
         self.pool_3 = nn.MaxPool1d(pool_size)
+        
+        # conv layers 4
+        self.batch_norm_4 = nn.BatchNorm1d(conv_l3)
+        self.conv_4 = nn.utils.weight_norm(nn.Conv1d(in_channels=conv_l3, out_channels=conv_l4, kernel_size=kernel_size))
+        self.relu_4 = nn.ReLU()
+        self.pool_4 = nn.AvgPool1d(pool_size)
 
         # configure transformed dimensions of the input as it reaches the fully connected layer
-        conv_L1_dim = math.floor((seq_length - (kernel_size - 1))/ pool_size)
-        conv_L2_dim = math.floor((conv_L1_dim - (kernel_size - 1)) / pool_size)
-        conv_L3_dim = math.floor((conv_L2_dim - (kernel_size - 1)) / pool_size)
+        conv_l1_dim = math.floor((seq_length - (kernel_size - 1))/ pool_size)
+        conv_l2_dim = math.floor((conv_l1_dim - (kernel_size - 1)) / pool_size)
+        conv_l3_dim = math.floor((conv_l2_dim - (kernel_size - 1)) / pool_size)
+        conv_l4_dim = math.floor((conv_l3_dim - (kernel_size - 1)) / pool_size)
         
-        # flat_size = conv_L1 * conv_L1_dim
-        flat_size = conv_L3 * conv_L3_dim
+        # flat_size = conv_l1 * conv_l1_dim
+        flat_size = conv_l4 * conv_l4_dim
 
         # flatten and prediction layers
         self.flatten = nn.Flatten()
@@ -87,26 +208,30 @@ class CNN_1D(nn.Module):
 
     def forward(self, input_x):
 
+        # residual = input_x
         # conv layers 1
         input_x = self.batch_norm_1(input_x)
-        input_x = self.dropout_1(input_x)
         input_x = self.conv_1(input_x)
         input_x = self.relu_1(input_x)
         input_x = self.pool_1(input_x)
 
         # conv layers 2
         input_x = self.batch_norm_2(input_x)
-        input_x = self.dropout_2(input_x)
         input_x = self.conv_2(input_x)
         input_x = self.relu_2(input_x)
         input_x = self.pool_2(input_x)
 
         # # conv layers 3
         input_x = self.batch_norm_3(input_x)
-        input_x = self.dropout_3(input_x)
         input_x = self.conv_3(input_x)
         input_x = self.relu_3(input_x)
         input_x = self.pool_3(input_x)
+        
+        # # conv layers 4
+        input_x = self.batch_norm_4(input_x)
+        input_x = self.conv_4(input_x)
+        input_x = self.relu_4(input_x)
+        input_x = self.pool_4(input_x)
 
         # flatten and prediction layers
         input_x = self.flatten(input_x)
@@ -114,6 +239,8 @@ class CNN_1D(nn.Module):
         input_x = F.relu(self.fc_2(input_x))
         input_x = F.relu(self.fc_3(input_x))
         output = self.softmax(input_x)
+        
+        # output += residual
 
         return output
 
@@ -133,12 +260,12 @@ class CNN_1D_wrapper():
     # =============================================================================
     dataset = 'varying' # being padded in the AIS_loader class
     datatype = 'padded'
-    data_ver = '2'
+    data_ver = '3'
     shuffle = True
     # =============================================================================
     # Hyperparameters
     # =============================================================================
-    conv_L1 = 16
+    conv_l1 = 64
     kernel_size = 3
     pool_size = 2
     eta = 3e-4
@@ -173,7 +300,7 @@ class CNN_1D_wrapper():
         self.n_classes = self.train_data.n_classes
         self.seq_length = self.train_data.seq_length
 
-        self.model = CNN_1D(n_features=self.n_features, n_classes=self.n_classes, seq_length=self.seq_length, conv_L1=self.conv_L1,  kernel_size=self.kernel_size, pool_size=self.pool_size).to(self.device)
+        self.model = CNN_1D(n_features=self.n_features, n_classes=self.n_classes, seq_length=self.seq_length, conv_l1=self.conv_l1,  kernel_size=self.kernel_size, pool_size=self.pool_size).to(self.device)
 
         match optimizer:
             case 'AdamW':
@@ -228,6 +355,8 @@ class CNN_1D_wrapper():
             # =============================================================================
             index = 0
             for features, labels, lengths in train_generator:
+                # with torch.no_grad():
+                # self.model.eval()
                 self.model.train()
                 features, labels = features.to(self.device), labels.to(self.device) # transfer to GPU
                 # forward propagation
@@ -237,8 +366,9 @@ class CNN_1D_wrapper():
                 loss = self.criterion(output, labels)
                 loss.backward()
                 self.optimizer.step()
-                
+                # outputs = torch.zeros(labels.size()[0]).int().to(self.device)
                 outputs = torch.argmax(output, dim=1)
+                
                 correct += (outputs == labels).sum().item()
             
                 if index == 0 and epoch == 0:
@@ -252,7 +382,7 @@ class CNN_1D_wrapper():
                         print(f'Epoch {epoch}, batch number: {index + 1}, training loss = {loss}')
                     train_loss_counter += 1
                     train_loss += loss.item()
-                        
+                            
                 index += 1
                 
             train_accuracy = 100 * (correct / (len(train_generator) * self.batch_size))
@@ -279,6 +409,7 @@ class CNN_1D_wrapper():
                         # calculate loss and valid_loss
                         v_loss = self.criterion(valid_output, valid_labels)
                         valid_outputs = torch.argmax(valid_output, dim=1)
+                        # valid_outputs = torch.zeros(valid_labels.size()[0]).int().to(self.device)
                         v_correct += (valid_outputs == valid_labels).sum().item()
 
                         if (v_index + 1) % plot_steps == 0:
@@ -301,6 +432,10 @@ class CNN_1D_wrapper():
                 valid_loss_counter = 0
             else:
                 self.predict()
+                
+            if epoch % 2 == 0:
+                self.confusion_matrix()
+                print(f'Class accuracies: {self.class_accuracies}\n')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -366,6 +501,7 @@ class CNN_1D_wrapper():
                 test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
                 test_output = self.model(test_features)
                 preds = torch.argmax(test_output, dim=1)
+                # preds = torch.zeros(test_labels.size()[0]).int().to(self.device)
                 for t, p in zip(test_labels.view(-1), preds):
                     confusion_matrix[t.long(), p.long()] += 1
         self.class_accuracies = (confusion_matrix.diag()/confusion_matrix.sum(1)).numpy()
@@ -511,7 +647,7 @@ class CNN_1D_wrapper():
         self.confusion_matrix()
         print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
-              f'conv_L1 = {self.conv_L1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
+              f'conv_l1 = {self.conv_l1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure \n{self.model.eval()}'
               f'\nData: {self.datatype}, v{self.data_ver}, varying intervals \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
@@ -535,37 +671,6 @@ class CNN_1D_wrapper():
 
 
 # =============================================================================
-# instantiate model and wrapper then train and save
-# =============================================================================
-# model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
-# model.fit(validate=True)
-# model.predict()
-# model.save_model('0')
-# model.print_summary()
-# model.plot('training_accuracy')
-# model.plot('validation_accuracy')
-# model.plot('training_loss')
-# model.plot('validation_loss')
-
-
-
-
-# =============================================================================
-# instantiate model and wrapper then load
-# =============================================================================
-# model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
-# model.load_model('8')
-# model.predict()
-# model.print_summary()
-# model.plot('validation_loss')
-# num = '{:.3f}'.format(round(model.history["test_accuracy"][0], 3))
-
-
-
-
-
-
-# =============================================================================
 # instantiate K models and select the model with the highest validation accuracy
 # =============================================================================
 def init_params(K):
@@ -573,7 +678,7 @@ def init_params(K):
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = CNN_1D_wrapper(CNN_1D, optimizer='Adam')
+        model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW')
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True)
         # print(models[k].history['validation_accuracy'])
@@ -610,16 +715,18 @@ def load_highest_model(model):
 # load the best randomly initialised network parameters for further training
 # =============================================================================
 
-model = CNN_1D_wrapper(CNN_1D, optimizer='AdamW', combine=True)
+model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW')
 # load_highest_model(model)
 # print(model.history)
-model.load_model(7)
-model.fit(validate=False, epochs=10)
-# model.predict()
+# model.load_model(9)
+model.fit(validate=True, epochs=25)
+model.predict()
 model.print_summary()
-# model.fit(validate=False, epochs=10)
+# model.fit(validate=True, epochs=30)
+# model.print_summary()
+
 # model.confusion_matrix()
-# model.save_model(7)
+model.save_model(1)
 # model.predict()
 
 
@@ -628,7 +735,6 @@ model.plot('training_accuracy')
 model.plot('validation_accuracy')
 model.plot('training_loss')
 model.plot('validation_loss')
-# model.plot('test_accuracy')
 
 
 

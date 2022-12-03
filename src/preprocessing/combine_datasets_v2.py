@@ -44,13 +44,13 @@ drifting_module = ppm.pre_processing_module('drifting_longlines')
 match choice: 
     case 'varying':
         
-        load_version = 1
-        save_version = 2
+        load_version = 3
+        save_version = 3
         n_features = 5
         time_period = 24
         threshold = 1
-        saving_parquet = False
-        saving = True
+        saving_parquet = True
+        saving = False
         
         aggregate_mask = []
         drop_columns = ['mmsi', 'distance_from_shore', 'distance_from_port', 'delta_t_cum', 'course', 'is_fishing', 'delta_t', 'desired', 'timestamp']
@@ -61,76 +61,98 @@ match choice:
             troller_list_df = troller_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
             troller_df, troller_mask = troller_module.flatten_df_list(troller_list_df, nested_list=True)
             aggregate_mask += troller_mask
-            aggregate_df = dd.from_pandas(troller_df, npartitions=1)
+            # aggregate_df = dd.from_pandas(troller_df, npartitions=1)
+            aggregate_df = troller_df
             
             # # pole and line
             pole_list_df = pole_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
             pole_df, pole_mask = pole_module.flatten_df_list(pole_list_df, nested_list=True)
             aggregate_mask += pole_mask
-            aggregate_df = dd.concat([aggregate_df, pole_df])
+            aggregate_df = pd.concat([aggregate_df, pole_df], ignore_index=True, axis=0)
             
             # purse seines
             purse_list_df = purse_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
             purse_df, purse_mask = purse_module.flatten_df_list(purse_list_df, nested_list=True)
             aggregate_mask += purse_mask
-            aggregate_df = dd.concat([aggregate_df, purse_df])
+            aggregate_df = pd.concat([aggregate_df, purse_df], ignore_index=True, axis=0)
             
             # fixed gear
             fixed_list_df = fixed_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
             fixed_df, fixed_mask = fixed_module.flatten_df_list(fixed_list_df, nested_list=True)
             aggregate_mask += fixed_mask
-            aggregate_df = dd.concat([aggregate_df, fixed_df])
+            aggregate_df = pd.concat([aggregate_df, fixed_df], ignore_index=True, axis=0)
             
             # trawlers
             trawlers_list_df = trawlers_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
             trawlers_df, trawlers_mask = trawlers_module.flatten_df_list(trawlers_list_df, nested_list=True)
             aggregate_mask += trawlers_mask
-            aggregate_df = dd.concat([aggregate_df, trawlers_df])
+            aggregate_df = pd.concat([aggregate_df, trawlers_df], ignore_index=True, axis=0)
             
             # drifting longlines
             drifting_list_df = drifting_module.build_sequences(time_period=time_period, threshold=threshold, drop_columns=drop_columns)
             drifting_df, drifting_mask = drifting_module.flatten_df_list(drifting_list_df, nested_list=True)
             aggregate_mask += drifting_mask
-            aggregate_df = dd.concat([aggregate_df, drifting_df])
+            aggregate_df = pd.concat([aggregate_df, drifting_df], ignore_index=True, axis=0)
         
         
             # =============================================================================
             # save files for memory management
             # =============================================================================
-            aggregate_df.to_parquet(f"../../data/parquet/aggregate_v{load_version}", engine="pyarrow", write_index=False)
-            with open(f'../../data/parquet/aggregate_mask_v{load_version}.pkl', 'wb') as f:
-                pickle.dump(aggregate_mask, f)
-                print('Parquet files saved successfully')
+# =============================================================================
+#             aggregate_df.to_parquet(f"../../data/parquet/aggregate_v{load_version}", engine="pyarrow", write_index=False)
+#             with open(f'../../data/parquet/aggregate_mask_v{load_version}.pkl', 'wb') as f:
+#                 pickle.dump(aggregate_mask, f)
+#                 print('Parquet files saved successfully')
+#                 
+#                 
+#             aggregate_df = aggregate_df.compute()
+# =============================================================================
                 
     
         # =============================================================================
         # read files
         # =============================================================================
-        else:
-            ddf = dd.read_parquet(f"../../data/parquet/aggregate_v{load_version}", engine="pyarrow", index=False)
-            with open(f'../../data/parquet/aggregate_mask_v{load_version}.pkl', 'rb') as f:
-                aggregate_mask = pickle.load(f)
-                print('Parquet files loaded successfully')
-            aggregate_df = ddf.compute()
+# =============================================================================
+#         else:
+#             ddf = dd.read_parquet(f"../../data/parquet/aggregate_v{load_version}", engine="pyarrow", index=False)
+#             with open(f'../../data/parquet/aggregate_mask_v{load_version}.pkl', 'rb') as f:
+#                 aggregate_mask = pickle.load(f)
+#                 print('Parquet files loaded successfully')
+#             aggregate_df = ddf.compute()
+# =============================================================================
         
         # instantiate empty preprocessing module for the operations to follow
         module = ppm.pre_processing_module("")
         
+        
+        
         # rebuild the sequences using the mask, then we shuffle and create more masks
         df_list = module.re_segment(aggregate_df, aggregate_mask, dataframe=True)
+        
+        
+        single = aggregate_df.iloc[24:24 + 35, :]
+        single_2 = df_list[3]
+        plt.plot(single['lat'], single['lon'])
+        plt.plot(single_2['lat'], single_2['lon'])
 
         # find max sequence length for padding process
+        total_ = 0
         seq_length = 0
         for item in df_list:
+            total_ += len(item)
             if len(item) > seq_length:
                 seq_length = len(item) # RESULT: 2931
+
 
         # now shuffle
         random.seed(15)
         random.shuffle(df_list)
+
+        single_3 = df_list[0]
+        plt.plot(single_3['lat'], single_3['lon'])
         
         # split the data while it's in batches
-        batch_train, batch_valid, batch_test = module.split(df_list)
+        batch_train, batch_valid, batch_test = module.split(df_list, train_ratio=(0.8))
         total = len(aggregate_df)
         
         # now we flatten the batches

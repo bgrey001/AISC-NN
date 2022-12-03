@@ -230,10 +230,10 @@ class pre_processing_module:
     # =============================================================================
     # helper method that splits the data into train and test sets and then normalises based on the data in the train sets
     # =============================================================================
-    def split(self, df): # takes as input the output of create_deltas()
+    def split(self, df, train_ratio): # takes as input the output of create_deltas()
         
         # shuffle must be false as we need to preserve the order of the time sequences 
-        data_train, data_rem = train_test_split(df, train_size=0.8, random_state=None, shuffle=False, stratify=None)
+        data_train, data_rem = train_test_split(df, train_size=train_ratio, random_state=None, shuffle=False, stratify=None)
         data_valid, data_test = train_test_split(data_rem, test_size=0.5, random_state=None, shuffle=False, stratify=None)
 
         return data_train, data_valid, data_test
@@ -353,10 +353,7 @@ class pre_processing_module:
         vessel_list = self.partition_vessels()
         interpolated_vessels = self.linear_interpolation(vessel_list=vessel_list, target_interval=time_interval)
         
-        
         # remove outliers step
-        
-        
         
         # df_list = self.create_deltas(list_df=interpolated_vessels, interpolated=True)
         

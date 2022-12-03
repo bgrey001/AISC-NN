@@ -45,12 +45,6 @@ Batch size = 32
 |        88.500       |      0.2841     |        66.672         |      1.4876       |      73.100     |    1.5737   |
 =====================================================================================================================
 
-=====================================================================================================================
-|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |
-=====================================================================================================================
-|  {round(self.history["training_accuracy"][-1], 3)}  |  {round(self.history["training_loss"][-1], 3)}  |  {round(self.history["validation_accuracy"][-1], 3)}  |  {round(self.history["validation_loss"][-1], 3)}  |  {round(self.history["test_accuracy"][0], 3)}  |  {round(self.history["test_loss"][0], 3)}  |
-=====================================================================================================================
-
 Training accuracy = 88.50031460931244, average training loss = 0.2841220244765282
 Validation accuracy = 66.67239010989012, average validation loss = 1.4876457929611206
 Test accuracy = 73.09981684981685, average test loss = 1.5737431049346924
