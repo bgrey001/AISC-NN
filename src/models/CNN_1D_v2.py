@@ -233,7 +233,7 @@ class CNN_1D_wrapper():
                 # forward propagation
                 output = self.model(features)
                 # backpropagation
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad() # move to before inference
                 loss = self.criterion(output, labels)
                 loss.backward()
                 self.optimizer.step()
