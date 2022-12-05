@@ -20,7 +20,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 hidden_size = 128 
 num_classes = 10
 num_epochs = 2
-batch_size = 100
+batch_size = 128
 learning_rate = 0.001
 
 input_size = 28
@@ -95,10 +95,13 @@ for epoch in range(num_epochs):
         # origin shape: [100, 1, 28, 28]
         # resized: [100, 28, 28]
         images = images.reshape(-1, sequence_length, input_size).to(device)
-        labels = labels.to(device)
         
+        labels = labels.to(device)
+        print(labels.size())
         # Forward pass
         outputs = model(images)
+        print(outputs.size())
+
         loss = criterion(outputs, labels)
         
         # Backward and optimize

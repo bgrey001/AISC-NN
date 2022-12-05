@@ -5,7 +5,7 @@ Created on Mon Nov 28 19:18:57 2022
 
 @author: benedict
 
-1 dimensional convolutional neural network PyTorch implementation (CNN_1D_v1)
+1 dimensional convolutional neural network with residual blocks  PyTorch implementation (CNN_1D_v1)
 
 """
 
@@ -25,36 +25,40 @@ import AIS_loader as data_module
 
 
 
-
-
-
 # =============================================================================
-# custom ResidualBlock
+# custom Residual block
 # =============================================================================
 class ResBlock(nn.Module):
+    
+    # =============================================================================
+    # constructor
+    # =============================================================================
     def __init__(self, in_channels, out_channels, kernel_size):
         super(ResBlock, self).__init__()
         
         self.conv_1 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=1)
         self.batch_norm_1 = nn.BatchNorm1d(out_channels)
-
+        
         self.conv_2 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=1)
         self.batch_norm_2 = nn.BatchNorm1d(out_channels)
         
         self.relu = nn.LeakyReLU()
         
+    # =============================================================================
+    # forward propagation method
+    # =============================================================================
     def forward(self, input_x):
+        residual = input_x # preserve input for identity connection
         
-        residual = input_x
-        input_x = self.conv_1(input_x)
+        input_x = self.conv_1(input_x) # conv block 1
         input_x = self.batch_norm_1(input_x)
         input_x = self.relu(input_x)
         
-        input_x = self.conv_2(input_x)
+        input_x = self.conv_2(input_x) # conv block 2
         input_x = self.batch_norm_2(input_x)
         input_x = self.relu(input_x)
         
-        input_x += residual
+        input_x += residual # residual injected
         output = self.relu(input_x)
         return output
         
@@ -77,7 +81,7 @@ class CNN_1D_v2(nn.Module):
 
         # calculate channel sizes for the different convolution layers
         conv_l2 = 2 * conv_l1
-        conv_l3 = 2 * conv_l2
+        conv_l3 = conv_l2
         
         self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_l1, kernel_size=kernel_size)
         self.batch_norm_1 = nn.BatchNorm1d(conv_l1)
@@ -90,17 +94,27 @@ class CNN_1D_v2(nn.Module):
         
         self.conv_2 = nn.Conv1d(in_channels=conv_l1, out_channels=conv_l2, kernel_size=kernel_size)
         self.batch_norm_2 = nn.BatchNorm1d(conv_l2)
+        
+        
+        self.res_block_3 = ResBlock(in_channels=conv_l2, out_channels=conv_l2, kernel_size=kernel_size)
+        self.res_block_4 = ResBlock(in_channels=conv_l2, out_channels=conv_l2, kernel_size=kernel_size)
+        self.avgpool = nn.AvgPool1d(pool_size)    
+
+        self.conv_3 = nn.Conv1d(in_channels=conv_l2, out_channels=conv_l2, kernel_size=kernel_size)
+        self.batch_norm_3 = nn.BatchNorm1d(conv_l2)
 
         
         # configure transformed dimensions of the input as it reaches the fully connected layer
         conv_l1_dim = math.floor((seq_length - (kernel_size - 1))/ pool_size)
-        conv_l2_dim = math.floor((conv_l1_dim - (kernel_size - 1)) / pool_size)
-        # conv_l3_dim = math.floor((conv_l2_dim - (kernel_size - 1)) / pool_size)
-        
-        # flat_size = conv_l1 * conv_l1_dim
+        res_l1_dim = math.floor(conv_l1_dim / pool_size)
+        conv_l2_dim = math.floor((res_l1_dim - (kernel_size - 1)) / pool_size)
+        res_l2_dim = math.floor(conv_l2_dim / pool_size)
+        conv_l3_dim = math.floor((res_l2_dim - (kernel_size - 1)) / pool_size)
+
+        flat_size = conv_l3 * conv_l3_dim
         # flat_size = (conv_l2 * conv_l2_dim)
-        flat_size = (conv_l2 * conv_l2_dim)
-        flat_size = (flat_size // 2) - conv_l1
+        # flat_size = (conv_l2 * conv_l2_dim)
+        # flat_size = (flat_size // 2) - conv_l1
 
         # flatten and prediction layers
         self.flatten = nn.Flatten()
@@ -111,7 +125,9 @@ class CNN_1D_v2(nn.Module):
         
 
 
-
+    # =============================================================================
+    # forward propagation method
+    # =============================================================================
     def forward(self, input_x):
         
         input_x = self.conv_1(input_x)
@@ -121,9 +137,17 @@ class CNN_1D_v2(nn.Module):
         input_x = self.res_block_1(input_x)
         input_x = self.res_block_2(input_x)
         input_x = self.avgpool(input_x)
-        
+
         input_x = self.conv_2(input_x)
         input_x = self.batch_norm_2(input_x)
+        input_x = self.maxpool(self.relu(input_x))
+        
+        input_x = self.res_block_3(input_x)
+        input_x = self.res_block_4(input_x)
+        input_x = self.avgpool(input_x)
+        
+        input_x = self.conv_3(input_x)
+        input_x = self.batch_norm_3(input_x)
         input_x = self.maxpool(self.relu(input_x))
         
         input_x = self.flatten(input_x)
@@ -205,7 +229,6 @@ class CNN_1D_v1(nn.Module):
     # =============================================================================
     # forward propagation method
     # =============================================================================
-
     def forward(self, input_x):
 
         # residual = input_x
@@ -246,7 +269,7 @@ class CNN_1D_v1(nn.Module):
 
 
 # =============================================================================
-# wrapper class for an instance of the GRU_RNN model
+# wrapper class for an instance of the CNN_1D model
 # =============================================================================
 class CNN_1D_wrapper():
 
@@ -450,7 +473,7 @@ class CNN_1D_wrapper():
     def predict(self):
 
         test_correct = test_loss_counter = test_loss = 0
-        test_print_steps = 50
+        test_print_steps = 20
         
         test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.CNN_collate)
         test_index = 0
@@ -510,27 +533,27 @@ class CNN_1D_wrapper():
     # method to save model to state_dict
     # =============================================================================
 
-    def save_model(self, version_number, path_specified=False):
+    def save_model(self, version_number, init=False):
         self.version_number = version_number
-        if path_specified:
+        if init:
             torch.save(self.model.state_dict(), f'saved_models/init_param_models/CNN_1D_v{version_number}.pt')
         else:
             torch.save(self.model.state_dict(), f'saved_models/CNN_1D_v{version_number}.pt')
             
         print(f'CNN_1D_v{version_number} state_dict successfully saved')
-        self.save_history(version_number)
+        self.save_history(version_number, init)
 
     # =============================================================================
     # method to load model from state_dict
     # =============================================================================
-    def load_model(self, version_number, path_specified=False):
+    def load_model(self, version_number, init=False):
         self.version_number = version_number
-        if path_specified:
+        if init:
             self.model.load_state_dict(torch.load(f'saved_models/init_param_models/CNN_1D_v{version_number}.pt'))
         else:
             self.model.load_state_dict(torch.load(f'saved_models/CNN_1D_v{version_number}.pt'))
         print(f'CNN_1D_v{version_number} state dictionary successfully loaded')
-        self.load_history(version_number)
+        self.load_history(version_number, init)
 
     # =============================================================================
     # method to print params of model
@@ -550,19 +573,27 @@ class CNN_1D_wrapper():
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
-    def save_history(self, version_number):
-        with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
-            pickle.dump(self.history, f)
-            print(f'CNN_1D_v{version_number} history saved')
+    def save_history(self, version_number, init=False):
+        if init:
+            with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
+                pickle.dump(self.history, f)
+        else:
+            with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
+                pickle.dump(self.history, f)
+        print(f'CNN_1D_v{version_number} history saved')
 
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
 
-    def load_history(self, version_number):
-        with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
-            self.history = pickle.load(f)
-            print(f'CNN_1D_v{version_number} history loaded')
+    def load_history(self, version_number, init=False):
+        if init:
+            with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
+                self.history = pickle.load(f)
+        else:
+            with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
+                self.history = pickle.load(f)
+        print(f'CNN_1D_v{version_number} history loaded')
 
     # =============================================================================
     # plot given metric
@@ -680,17 +711,17 @@ def init_params(K):
     for k in range(K):
         model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW')
         print(f'MODEL {k + 1} -------------------------------->')
-        model.fit(validate=True)
+        model.fit(validate=True, epochs=3)
         # print(models[k].history['validation_accuracy'])
         if max(model.history['validation_accuracy']) > records['highest_accuracy']:
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
             records['highest_accuracy'] = max(model.history['validation_accuracy'])
-        model.save_model(k + 1)
+        model.save_model(k + 1, init=True)
         del model
         
     # save highest index 
-    with open('saved_models/history/highest_idx.pkl', 'wb') as f:
+    with open('saved_models/history/init_histories/highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
     
@@ -705,20 +736,20 @@ def init_params(K):
 # load the parameters of the model with the highest validation accuracy
 # =============================================================================
 def load_highest_model(model):
-    with open('saved_models/history/highest_idx.pkl', 'rb') as f:
+    with open('saved_models/history/init_histories/highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
-    model.load_model(highest_idx, path_specified=True)
+    model.load_model(highest_idx, init=True)
     
     
 # =============================================================================
 # load the best randomly initialised network parameters for further training
 # =============================================================================
 
-model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW')
+model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW', combine=False)
 # load_highest_model(model)
 # print(model.history)
-# model.load_model(9)
+# model.load_model(2)
 model.fit(validate=True, epochs=25)
 model.predict()
 model.print_summary()
@@ -726,7 +757,7 @@ model.print_summary()
 # model.print_summary()
 
 # model.confusion_matrix()
-model.save_model(1)
+# model.save_model(2)
 # model.predict()
 
 
@@ -735,6 +766,8 @@ model.plot('training_accuracy')
 model.plot('validation_accuracy')
 model.plot('training_loss')
 model.plot('validation_loss')
+
+# model.plot('test_accuracy')
 
 
 

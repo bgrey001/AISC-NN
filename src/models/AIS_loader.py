@@ -27,8 +27,6 @@ class AIS_loader(Dataset):
 #     feature columns: speed, lat, lon, time_delta, course_delta
 # =============================================================================
     
-        
-        
     
     def __init__(self, choice, split, version, split_2=None):
         random.seed(15) # set random seed to reproduce random results
@@ -76,21 +74,55 @@ class AIS_loader(Dataset):
         sequences = torch.transpose(input=sequences, dim0=1, dim1=2) # transpose sequences
         
         return sequences.float(), labels.long(), lengths.long()
+    
+    
+    def GRU_collate(self, data):
+        seqs, labels, lengths = zip(*data)
+        max_len = self.seq_length
+        n_features = 5
+    
+        sequences = torch.zeros(len(data), max_len, n_features) # create empty padded tensor to fill in loop below
+        labels = torch.tensor(labels)
+        lengths = torch.tensor(lengths)
+        
+        for i in range(len(data)):
+            j, k = data[i][0].size(0), data[i][0].size(1)
+            sequences[i] = torch.cat([data[i][0], torch.zeros((max_len - j, k))])
+        
+        
+        return sequences.float(), labels.long(), lengths.long()
 
         
-
+    # =============================================================================
+    # method that randomly visualises the tensor sequences from the class
+    # =============================================================================
+    def visualise_tensor(self, n_iters):
+        for i in range(n_iters):
+            random_int = random.randint(0, len(self.seq_list))
+            feature, label, length = self.__getitem__(random_int)
+            plt.title(f'index: {random_int}, label: {label}, seq_length: {length}, tensor')
+            plt.plot(feature[:, 1], feature[:, 2])
+            plt.scatter(feature[:, 1], feature[:, 2], s=8)
+            plt.show()
 
 
 # =============================================================================
 # testing zone
 # =============================================================================
 
-dataset = AIS_loader(choice='varying', split='train', version=3)
-seq_list = dataset.seq_list
+# dataset = AIS_loader(choice='varying', split='train', version=3)
+# dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=dataset.GRU_collate)
 
-single = seq_list[14705]
-plt.plot(single[:, 1], single[:, 2])
-plt.scatter(single[:, 1], single[:, 2], s=8)
+# for features, labels, lengths in dataloader:
+#     print(labels.size())
+# dataset.visualise_tensor(100)
+
+
+# seq_list = dataset.seq_list
+# single = seq_list[0]
+# single = seq_list[14705]
+# plt.plot(single[:, 1], single[:, 2])
+# plt.scatter(single[:, 1], single[:, 2], s=8)
 
 
 
