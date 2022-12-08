@@ -110,7 +110,7 @@ class AIS_loader(Dataset):
 # testing zone
 # =============================================================================
 
-# dataset = AIS_loader(choice='varying', split='train', version=3)
+dataset = AIS_loader(choice='varying', split='test', version=3)
 # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=dataset.GRU_collate)
 
 # for features, labels, lengths in dataloader:

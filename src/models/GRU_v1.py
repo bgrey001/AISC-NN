@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
+from pycm import *
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -40,7 +40,7 @@ class GRU(nn.Module):
     def __init__(self, n_features, hidden_dim, n_layers, n_classes, seq_length, batch_size):
         super(GRU, self).__init__()
         
-        self.dropout_prob = 0
+        self.dropout_prob = 0.1
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim  
         self.batch_size = batch_size
@@ -110,15 +110,26 @@ class GRU_wrapper():
     # =============================================================================
     def __init__(self, GRU, optimizer, combine=False):
         
-        # instantiate class members
+        # init class members
         self.version_number = 0
 
-        self.history = {'training_accuracy': [], 'training_loss': [], 'validation_accuracy': [], 'validation_loss': [], 'test_accuracy': [], 'test_loss': []}
+        self.history = {'training_accuracy': [], 
+                        'training_loss': [], 
+                        'validation_accuracy': [], 
+                        'validation_loss': [], 
+                        'test_accuracy': [], 
+                        'test_loss': [],
+                        
+                        'confusion_matrix': None,
+                        'class_precisions': None,
+                        'class_recalls': None,
+                        'class_F1_scores': None,
+                        'class_supports': None}
+        
         self.training_losses, self.validation_losses, self.test_losses, self.training_accuracies, self.validation_accuracies, self.test_accuracies = ([] for i in range(6))
         self.class_accuracies = None
         
-        
-        # instantiate dataset class objects
+        # init dataset class objects
         if combine:
             self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver, split_2='valid')
         else:
@@ -204,7 +215,7 @@ class GRU_wrapper():
                 # outputs = torch.zeros(labels.size()[0]).int().to(self.device)
                 outputs = torch.argmax(output, dim=1)
                 
-                correct += (outputs == labels).sum().item()
+                aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
             
                 if index == 0 and epoch == 0:
                     first_accuracy = (100 * (correct / labels.size()[0]))
@@ -220,7 +231,7 @@ class GRU_wrapper():
                             
                 index += 1
                 
-            train_accuracy = 100 * (correct / (len(train_generator) * self.batch_size))
+            train_accuracy = aggregate_correct / (len(train_generator))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
             print("========================================================================================================================================================== \n" +
@@ -245,7 +256,7 @@ class GRU_wrapper():
                         v_loss = self.criterion(valid_output, valid_labels)
                         valid_outputs = torch.argmax(valid_output, dim=1)
                         # valid_outputs = torch.zeros(valid_labels.size()[0]).int().to(self.device)
-                        v_correct += (valid_outputs == valid_labels).sum().item()
+                        v_correct += ((valid_outputs == valid_labels).sum().item() / len(valid_labels)) * 100
 
                         if (v_index + 1) % plot_steps == 0:
                             # metric = MulticlassAccuracy(num_classes=self.n_classes, average=None).to(self.device)
@@ -256,7 +267,7 @@ class GRU_wrapper():
                             valid_loss += v_loss.item()
                             
                     v_index += 1
-                val_accuracy = 100 * (v_correct / (len(valid_generator) * self.batch_size))
+                val_accuracy = v_correct / (len(valid_generator))
                 self.validation_accuracies.append(val_accuracy)
                 self.validation_losses.append(valid_loss/valid_loss_counter)
                 print("========================================================================================================================================================== \n" +
@@ -270,7 +281,7 @@ class GRU_wrapper():
                 
             if epoch % 2 == 0:
                 self.confusion_matrix()
-                print(f'Class accuracies: {self.class_accuracies}\n')
+                print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -298,15 +309,15 @@ class GRU_wrapper():
                 t_loss = self.criterion(test_output, test_labels)
                 test_outputs = torch.argmax(test_output, dim=1)
                 # test_outputs = torch.zeros(test_labels.size()[0]).int().to(self.device)
-                test_correct += (test_outputs == test_labels).sum().item()
-            
+                test_correct += ((test_outputs == test_labels).sum().item() / len(test_labels)) * 100 
+
                 if (test_index + 1) % (test_print_steps) == 0:
                     print(f'test batch number: {test_index + 1}, test loss = {t_loss}')
                     test_loss_counter += 1
                     test_loss += t_loss.item()
             test_index += 1
 
-        test_accuracy = 100 * (test_correct / (len(test_generator) * self.batch_size))
+        test_accuracy = test_correct / (len(test_generator))
         self.test_losses.append(test_loss/test_loss_counter)
         self.test_accuracies.append(test_accuracy)
         print("========================================================================================================================================================== \n" +
@@ -322,23 +333,54 @@ class GRU_wrapper():
 
 
 
+  
     # =============================================================================
     # method to build confusion matrix
     # =============================================================================
-    def confusion_matrix(self):
+    def confusion_matrix(self, save_fig=False, print_confmat=False):
+        
+        test_correct = 0
+        predicted, labels = [], []
+        n_correct = 0
+        
         class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
-        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.GRU_collate, drop_last=True)
-        confusion_matrix = torch.zeros(self.n_classes, self.n_classes)
+        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
         with torch.no_grad():
             self.model.eval()
             for test_features, test_labels, lengths in test_generator:
                 test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
                 test_output = self.model(test_features)
                 preds = torch.argmax(test_output, dim=1)
-                # preds = torch.zeros(test_labels.size()[0]).int().to(self.device)
-                for t, p in zip(test_labels.view(-1), preds):
-                    confusion_matrix[t.long(), p.long()] += 1
-        self.class_accuracies = (confusion_matrix.diag()/confusion_matrix.sum(1)).numpy()
+
+                # confmat variables
+                predicted.append(preds.cpu().detach().numpy())
+                labels.append(test_labels.cpu().detach().numpy())
+
+                n_correct += ((preds == test_labels).sum().item() / len(test_labels)) * 100 
+                test_correct += (preds == test_labels).sum().item()
+        
+        predicted = np.concatenate(predicted).ravel().tolist()
+        labels = np.concatenate(labels).ravel().tolist()
+    
+        confmat = ConfusionMatrix(actual_vector=labels, predict_vector=predicted)
+        
+        if print_confmat:
+            confmat.print_matrix()
+            confmat.stat(summary=True)
+        
+        if save_fig:
+            confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
+            plt.savefig(f'GRU_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/GRU/v{self.version_number}/confmat_GRU_v{self.version_number}.png', dpi=300)
+
+        
+        
+        self.history['confusion_matrix'] = confmat
+        self.history['class_precisions'] = confmat.class_stat['PPV']
+        self.history['class_recalls'] = confmat.class_stat['TPR']
+        self.history['class_F1_scores'] = confmat.class_stat['F1']
+        self.history['class_supports'] = confmat.class_stat['P']
+        
     
     # =============================================================================
     # method to save model to state_dict
@@ -480,36 +522,33 @@ class GRU_wrapper():
                 plt.show()
                 
                 
-
     # =============================================================================
     # plot given metric
     # =============================================================================
 
-    def print_summary(self):
+    def print_summary(self, print_cm=False):
         self.confusion_matrix()
         print(f'\nModel: GRU_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
-              f'conv_l1 = {self.conv_l1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure \n{self.model.eval()}'
               f'\nData: {self.datatype}, v{self.data_ver}, varying intervals \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
         print('\nMetric table')
-        
         print(f'=====================================================================================================================\n'
               f'|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |'
               f'=====================================================================================================================\n'
               f'|        {"{:.3f}".format(round(self.history["training_accuracy"][-1], 4))}%      |      {"{:.3f}".format(round(self.history["training_loss"][-1], 3))}      |        {"{:.3f}".format(round(self.history["validation_accuracy"][-1], 3))}%        |       {"{:.3f}".format(round(self.history["validation_loss"][-1], 4))}       |      {"{:.3f}".format(round(self.history["test_accuracy"][-1], 3))}%    |     {"{:.3f}".format(round(self.history["test_loss"][-1], 4))}   |'
               f'=====================================================================================================================')
         
-        print('\nClass accuracy table')
-
+        print('\nClass F1-score table')
         print(f'=====================================================================================================================\n'
               f'|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |'
               f'=====================================================================================================================\n'
-              f'|           {"{:1d}".format(round(100 * self.class_accuracies[0]))}%          |        {"{:1d}".format(round(100 * self.class_accuracies[1]))}%       |        {"{:1d}".format(round(100 * self.class_accuracies[2]))}%        |       {"{:1d}".format(round(100 * self.class_accuracies[3]))}%        |        {"{:1d}".format(round(100 * self.class_accuracies[4]))}%     |       {"{:1d}".format(round(100 * self.class_accuracies[5]))}%     |'
-              f'=====================================================================================================================')
-
+              f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |'
+              f'=====================================================================================================================\n\n')
+        if print_cm:
+            self.confusion_matrix(print_confmat=(True))
 
 
 # =============================================================================
@@ -520,7 +559,7 @@ def init_params(K):
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = GRU_wrapper(GRU, optimizer='AdamW')
+        model = GRU_wrapper(GRU_v2, optimizer='AdamW')
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=3)
         # print(models[k].history['validation_accuracy'])
@@ -535,7 +574,6 @@ def init_params(K):
     with open('saved_models/history/init_histories/highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
-    
     
 # =============================================================================
 # run random initalisation and then load the model with the highest validation accuracy for more training
@@ -560,23 +598,24 @@ def load_highest_model(model):
 model = GRU_wrapper(GRU, optimizer='AdamW', combine=False)
 # load_highest_model(model)
 # print(model.history)
-# model.load_model(2)
-model.fit(validate=True, epochs=25)
+model.load_model(3)
+# model.confusion_matrix()
+# model.fit(validate=True, epochs=50)
 model.predict()
-model.print_summary()
+# model.print_summary(print_cm=(True))
 # model.fit(validate=True, epochs=30)
 # model.print_summary()
 
-# model.confusion_matrix()
-# model.save_model(2)
+model.confusion_matrix(save_fig=(True))
+# model.save_model(4)
 # model.predict()
 
 
 
-# model.plot('training_accuracy')
-# model.plot('validation_accuracy')
-# model.plot('training_loss')
-# model.plot('validation_loss')
+model.plot('training_accuracy')
+model.plot('validation_accuracy')
+model.plot('training_loss')
+model.plot('validation_loss')
 
 # model.plot('test_accuracy')
 
