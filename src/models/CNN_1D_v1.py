@@ -130,17 +130,32 @@ class CNN_1D_v2(nn.Module):
     # =============================================================================
     def forward(self, input_x):
         
+        print(input_x.size())
+        
         input_x = self.conv_1(input_x)
+        print(input_x.size())
+
         input_x = self.batch_norm_1(input_x)
         input_x = self.maxpool(self.relu(input_x))
-        
+        print(input_x.size())
+
+
         input_x = self.res_block_1(input_x)
+        print(input_x.size())
+
         input_x = self.res_block_2(input_x)
+        print(input_x.size())
+
         input_x = self.avgpool(input_x)
+        print(input_x.size())
 
         input_x = self.conv_2(input_x)
+        print(input_x.size())
+
         input_x = self.batch_norm_2(input_x)
         input_x = self.maxpool(self.relu(input_x))
+        print(input_x.size())
+
         
         # input_x = self.res_block_3(input_x)
         # input_x = self.res_block_4(input_x)
@@ -151,10 +166,20 @@ class CNN_1D_v2(nn.Module):
         # input_x = self.maxpool(self.relu(input_x))
         
         input_x = self.flatten(input_x)
+        print(input_x.size())
+
         input_x = F.relu(self.fc_1(input_x))
+        print(input_x.size())
+
         input_x = F.relu(self.fc_2(input_x))
+        print(input_x.size())
+
         input_x = F.relu(self.fc_3(input_x))
+        print(input_x.size())
+
         output = self.softmax(input_x)
+        print(output.size())
+
         
         return output
         
@@ -600,11 +625,17 @@ class CNN_1D_wrapper():
     # =============================================================================
     # method to print params of model
     # =============================================================================
-
     def print_params(self):
-        params = self.model.parameters()
-        for p in params:
-            print(p)
+        params = self.model.named_parameters()
+        # for p in params:
+        #     print(p)
+            
+        for name, param in params:
+            # if param.requires_grad:
+            print(name)
+            print(param.data.shape)
+            print()
+                # print(name, param.data)
 
     # =============================================================================
     # returns history
@@ -727,16 +758,16 @@ class CNN_1D_wrapper():
         
         print('\nMetric table')
         print(f'=====================================================================================================================\n'
-              f'|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |'
+              f'|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |\n'
               f'=====================================================================================================================\n'
-              f'|        {"{:.3f}".format(round(self.history["training_accuracy"][-1], 4))}%      |      {"{:.3f}".format(round(self.history["training_loss"][-1], 3))}      |        {"{:.3f}".format(round(self.history["validation_accuracy"][-1], 3))}%        |       {"{:.3f}".format(round(self.history["validation_loss"][-1], 4))}       |      {"{:.3f}".format(round(self.history["test_accuracy"][-1], 3))}%    |     {"{:.3f}".format(round(self.history["test_loss"][-1], 4))}   |'
+              f'|        {"{:.3f}".format(round(self.history["training_accuracy"][-1], 4))}%      |      {"{:.3f}".format(round(self.history["training_loss"][-1], 3))}      |        {"{:.3f}".format(round(self.history["validation_accuracy"][-1], 3))}%        |       {"{:.3f}".format(round(self.history["validation_loss"][-1], 4))}       |      {"{:.3f}".format(round(self.history["test_accuracy"][-1], 3))}%    |     {"{:.3f}".format(round(self.history["test_loss"][-1], 4))}   |\n'
               f'=====================================================================================================================')
         
         print('\nClass F1-score table')
         print(f'=====================================================================================================================\n'
-              f'|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |'
+              f'|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |\n'
               f'=====================================================================================================================\n'
-              f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |'
+              f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |\n'
               f'=====================================================================================================================\n\n')
         if print_cm:
             self.confusion_matrix(print_confmat=(True))
@@ -746,7 +777,7 @@ class CNN_1D_wrapper():
 # =============================================================================
 # instantiate K models and select the model with the highest validation accuracy
 # =============================================================================
-def init_params(K):
+def nonrandom_init(K):
     print(f'Beginning random initalisation with {K} different models')
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
@@ -771,7 +802,7 @@ def init_params(K):
 # =============================================================================
 # run random initalisation and then load the model with the highest validation accuracy for more training
 # =============================================================================
-# init_params(K=20)
+# nonrandom_init(K=20)
 
     
 # =============================================================================
@@ -794,11 +825,14 @@ model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW', combine=True)
 model.load_model(4)
 # model.fit(validate=False, epochs=10)
 model.predict()
-model.confusion_matrix(print_confmat=(True), save_fig=True)
+# model.confusion_matrix(print_confmat=(True), save_fig=False)
 # print("{:1d}".format(round(100 * model.history["class_F1_scores"][0])))
 
 
-model.print_summary(print_cm=(True))
+# model.print_summary(print_cm=(True))
+
+model.print_params()
+
 # model.fit(validate=True, epochs=30)
 # model.print_summary()
 

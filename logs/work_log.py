@@ -37,8 +37,8 @@ Created GRU-RNN PyTorch model for varying length sequences
     	- Samping error was creating even distribution across the classes
 Modified pre_processing module to create natural class sample distribution
     - Further modifications include introducing linear interpolation, necessary for training the CNN
-Created the 1DCNN PyTorch model
-    - Extensive problems with exploding gradient caused by NaN values in the linearly interpolated data, solved by re normalising the aggregated data
+Created the 1D_CNN PyTorch model
+    - Extensive problems with exploding gradient caused by NaN values in the linearly interpolated data, solved by re-normalising the aggregated data
 
 
 
@@ -46,23 +46,100 @@ Sat Nov 26 12:11:21 2022
 ------------------------------------------------>
 Rebuilt data pipeline due to memory constraints with the load_data class.
 	- Implemented the PyTorch Dataset class (AIS_loader.py), introduced a custom collate_fn to pad the tensors with zeros
-Fine tuning CNN class, using a K random parameter initialisation technique to explore the multi model error landscape and find the best starting parameters to then do more extensive training, starting with those parameters
+Fine tuning CNN class, using nonrandom parameter initialisation according to a Reed and Marks technique to explore the multimodal error landscape and find the best starting parameters to then do more extensive training, starting with those parameters.
+Novel additiion to the Reed and Marks nonrandom initialisation by using validation accuracy as the defining metric as opposed to training loss, this allows the exploration to focus on generalisation as a priority
 
 
 
+Mon Nov 28 10:43:50 2022
+------------------------------------------------>
+Created padding function in AIS_loader class (using tensors not numpy arrays)
+	- This has allowed batching for training, massively increasing throughput and training efficiency. 
+Created the 1D_CNN_v1.py class inheriting from PyTorch nn.Module class
+Created wrapper class for the 1D_CNN_v1.py class to introduce fit, predict, confusion_matrix, visualisation and more methods and class attributes for more efficient tracking of results and training
+
+
+
+Wed Nov 30 15:27:35 2022
+------------------------------------------------>
+Suspiciously accurate results for the 1D_CNN (98%), investigating the cause - nothing so far
+
+    
+    
+Sat Dec 3 17:19:54 2022
+------------------------------------------------>
+Error found in the data processing, specifically combine_datasets.py, led to jumbled sequences causing the false positives
+Problem fixed and implemented in data_preprocessing_module_v2.py and combine_datasets_v2.py, results are more believable
+
+
+
+Mon Dec 5 18:09:14 2022
+------------------------------------------------>
+Results from the 1D_CNN stalled at accuracy 88%, introduced residual blocks to help with stability and performance as the network complexity grows
+Results already up to 91% with res blocks, continuing to tweak hyperparams to get better results
+
+
+Tue Dec 6 22:03:48 2022
+------------------------------------------------>
+Res block 1D CNN best results so far with more than 93% test accuracy after validation and training results were combined for a final run. Strong results
+Implemented GRU, starting with 1 GRU module, no droupout and mono directional. Results are promising and with further tweaking results could surpass res block CNN
+
+
+Wed Dec 7 19:29:36 2022
+------------------------------------------------>
+Stacked, bidirectional GRU with dropout and 128 hidden units is performing excellently on the padded, featurised data with final results of 95% test accuracy
+Very stable training, clearly a strong model for time series data, even irregular data 
+
+
+Fri Dec 9 21:51:29 2022
+------------------------------------------------>
+Researched GIS software for visualising the trajectories, ArcGIS seemed like the best prospect but was paywalled. Therefore Q-GIS was implemented and used for the data visualisations
+Captured figures for selected trajectories of each fishing class for section 3 of the research paper
+
+
+Mon Dec 12 13:07:59 2022
+------------------------------------------------>
+Prototype results gathered for design specification hand in, write up beginning now. 
+
+
+
+Mon Dec 19 11:26:21 2022
+------------------------------------------------>
+Completed Preliminary results section
+Tables for each GRU and CNN
+	- Structure table
+	- Hyperparameters table
+	- Results table
+Figures for GRU and CNN
+
+		
+	
+Tue Dec 20 15:52:47 2022
+------------------------------------------------>
+Organised tables
+GRU and CNN equations added
+Completed references
+Introduced abstract
+Appendix:
+	- Do Gantt chart for project timeline - done
+	- MVP - done
+	- Core technologies - done
+	
+
+    
+    
     
 BACKLOG:
 ------------------------------------------------>
-1) Create padding function in load data (using tensors not numpy arrays) -> finished
-4) Train CNN and GRU on padded data -> in progress
-
-
-2) Map trajectories onto a world map using cartopy fot the data section (section 3) of the research paper
-3) Create linearly interpolated data with higher resolution (every 5 minutes), using custom PyTorch Dataset class
-5) Train and test CNN on new padded data and linearly interpolated data
-6) Build and train GRU on padded and linearly interpolated data
-7) Implement mTANs on Mimic III dataset for testing
-   
+* Create reference time point set for both interpolation techniques
+* Create linearly interpolated data with higher resolution (every minute), using custom PyTorch Dataset class for memory management
+* Train 1D CNN and GRU models on linearly interpolated data using similar methodology and complexity, gain best possible results
+* Implement mTANs on Mimic III dataset for testing
+* Non-linear interpolation using the reference time points generated on the AIS data
+* Train classification networks on the non-linearly interpolated data and gain best possible results
+* Implement SVM on all data pipelines for comparison
+* Begin evaluation of results
+* Research applications for real time data
    
    
    
@@ -86,57 +163,16 @@ Collated and padded varying sequence lengths:
 
 Linear interpolation:
 
-	1)
+	1) Create reference time points
+	2) Merge irregular time series data and the reference time points
+	3) Interpolate using formula provided
+	4) Remove original data points, leaving only the evenly sampled time series data
 
-	
+mTAN non-linear interpolation network:
+
+	1) Create reference time points
+	2) ?
 	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-Tim notes:
-Framework that we can build on
-
-Problems overcame in data
-
-Keep style
-
-Breakdown of the system
-
-Models building
-
-use tables for results
-
-Problem solving
-
-Abstract at the start
-Present preliminary results
-
-More exotic?
-
-Non neural network modelling
-Best result and comparison
-Don't explain, just reference
-
-
-
-
-
-
-Appendix:
-Risk analysis
-Project planb
-Have I achieve the mielstones?
-
-
 	    
 	    
 	    

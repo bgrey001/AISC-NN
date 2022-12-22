@@ -84,7 +84,7 @@ TN(True negative/correct rejection)                               9587          
 TON(Test outcome negative)                                        9945          20086         22276         20223         18070         22360         
 TOP(Test outcome positive)                                        12647         2506          316           2369          4522          232           
 TP(True positive/hit)                                             12434         2142          266           2070          4329          222           
-TPR(Sensitivity, recall, hit rate, or true positive rate)         0.97201       0.90342       0.90785       0.90829       0.93722       0.93277 
+TPR(Sensitivity, recall, hit rate, or true positive rate)         
 
 
 """

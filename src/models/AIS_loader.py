@@ -100,6 +100,7 @@ class AIS_loader(Dataset):
         for i in range(n_iters):
             random_int = random.randint(0, len(self.seq_list))
             feature, label, length = self.__getitem__(random_int)
+            print(feature)
             plt.title(f'index: {random_int}, label: {label}, seq_length: {length}, tensor')
             plt.plot(feature[:, 1], feature[:, 2])
             plt.scatter(feature[:, 1], feature[:, 2], s=8)
@@ -110,12 +111,12 @@ class AIS_loader(Dataset):
 # testing zone
 # =============================================================================
 
-dataset = AIS_loader(choice='varying', split='test', version=3)
+# dataset = AIS_loader(choice='varying', split='test', version=3)
 # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=dataset.GRU_collate)
 
 # for features, labels, lengths in dataloader:
 #     print(labels.size())
-# dataset.visualise_tensor(100)
+# dataset.visualise_tensor(5)
 
 
 # seq_list = dataset.seq_list
