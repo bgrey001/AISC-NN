@@ -1,10 +1,10 @@
 # Automatic identification system classification neural network (AISC-NN)
 
 
-![Image](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png "System architecture")
+![Image](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png =100x20)
 
 
-![Image](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png "Data processing pipelines")
+![Image](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png =100x20)
 
 
 Welcome to the code base for AISC-NN, the workflow for taking data from csv and classifying using the models is as follows:
