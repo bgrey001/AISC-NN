@@ -1,6 +1,8 @@
 # Automatic identification system classification neural network (AISC-NN)
 
 
+[<img src="https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png" width="30" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png)
+
 ![Image](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png =100x20)
 
 
