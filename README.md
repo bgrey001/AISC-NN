@@ -1,6 +1,6 @@
 # Automatic identification system classification neural network (AISC-NN)
 
-### Welcome to the code base for AISC-NN: an investigation into computational methods for classifying fishing vessels to identify illegal, unreported and unregulated fishing activity
+### Code base for AISC-NN: an investigation into computational methods for classifying fishing vessels to identify illegal, unreported and unregulated fishing activity
 
 Although primarily a deep learning methodology is followed in the paper and the codebase, support vector machines (SVMs) will be implemented as a non deep learning approach. The deep learning classification models implemented are as follows:
 * 1D convolutional neural network (CNN) with residual blocks (identity connections)
