@@ -1,11 +1,13 @@
 # Automatic identification system classification neural network (AISC-NN)
 
 
-[<img src="https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png" width="500" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png)
+[<img src="https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png" width="800" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png)
+
 *System architecture*
 
 
-[<img src="ais-cnn" width="700" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png)
+[<img src="https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png" width="700" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png)
+
 *Data processing pipelines*
 
 
