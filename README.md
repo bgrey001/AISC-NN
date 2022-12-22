@@ -6,7 +6,9 @@ Although primarily a deep learning methodology is followed in the paper and the 
 * 1D convolutional neural network (CNN) with residual blocks (identity connections)
 * Stacked, bidirectional gated recurrent unit network (GRU)
 
+
 [<img src="https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png" width="500" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/system_architecture_wb.png)
+
 *System architecture*
 
 
@@ -17,6 +19,7 @@ Data processing has been seperated into three channels with differing techniques
 * Non-linear interpolation
 
 [<img src="https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png" width="500" />](https://github.com/bgrey001/AISC-NN/blob/main/plots/figures/data_pipeline_wb.png)
+
 *Data processing pipelines*
 
 The workflow for taking data from csv and classifying using the models is as follows:

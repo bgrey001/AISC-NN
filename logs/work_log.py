@@ -28,7 +28,6 @@ Created the following files:
     - load_data module
     
     
-    
 Mon Nov 21 19:16:43 2022
 ------------------------------------------------>
 Created GRU-RNN PyTorch model for varying length sequences
@@ -41,14 +40,12 @@ Created the 1D_CNN PyTorch model
     - Extensive problems with exploding gradient caused by NaN values in the linearly interpolated data, solved by re-normalising the aggregated data
 
 
-
 Sat Nov 26 12:11:21 2022
 ------------------------------------------------>
 Rebuilt data pipeline due to memory constraints with the load_data class.
 	- Implemented the PyTorch Dataset class (AIS_loader.py), introduced a custom collate_fn to pad the tensors with zeros
 Fine tuning CNN class, using nonrandom parameter initialisation according to a Reed and Marks technique to explore the multimodal error landscape and find the best starting parameters to then do more extensive training, starting with those parameters.
 Novel additiion to the Reed and Marks nonrandom initialisation by using validation accuracy as the defining metric as opposed to training loss, this allows the exploration to focus on generalisation as a priority
-
 
 
 Mon Nov 28 10:43:50 2022
@@ -59,18 +56,15 @@ Created the 1D_CNN_v1.py class inheriting from PyTorch nn.Module class
 Created wrapper class for the 1D_CNN_v1.py class to introduce fit, predict, confusion_matrix, visualisation and more methods and class attributes for more efficient tracking of results and training
 
 
-
 Wed Nov 30 15:27:35 2022
 ------------------------------------------------>
 Suspiciously accurate results for the 1D_CNN (98%), investigating the cause - nothing so far
-
     
     
 Sat Dec 3 17:19:54 2022
 ------------------------------------------------>
 Error found in the data processing, specifically combine_datasets.py, led to jumbled sequences causing the false positives
 Problem fixed and implemented in pre_processing_module_v2.py and combine_datasets_v2.py, results are more believable
-
 
 
 Mon Dec 5 18:09:14 2022
@@ -102,7 +96,6 @@ Mon Dec 12 13:07:59 2022
 Prototype results gathered for design specification hand in, write up beginning now. 
 
 
-
 Mon Dec 19 11:26:21 2022
 ------------------------------------------------>
 Completed Preliminary results section
@@ -112,7 +105,6 @@ Tables for each GRU and CNN
 	- Results table
 Figures for GRU and CNN
 
-		
 	
 Tue Dec 20 15:52:47 2022
 ------------------------------------------------>
@@ -129,6 +121,8 @@ Appendix:
     
     
     
+    
+    
 BACKLOG:
 ------------------------------------------------>
 * Create reference time point set for both interpolation techniques
@@ -140,10 +134,6 @@ BACKLOG:
 * Implement SVM on all data pipelines for comparison
 * Begin evaluation of results
 * Research applications for real time data
-   
-   
-   
-   
    
    
     
@@ -173,45 +163,5 @@ mTAN non-linear interpolation network:
 	1) Create reference time points
 	2) ?
 	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	    
-	   
-Notes:
-
-How to figure out number of neurons needed in the fully connected layer
-
-Layer 1
-Each input is 4 features, 180 sequence length (8 minute intervals)
-4 channels in (for each feature)
-maxpool is 2
-
-output1 = out_channels1 x seq_length - (kernel_size - 1)
-	= 16 x 180 - (2 - 1)
-	= 16 x 179 	
-divide dim=1 by maxpoolsize and take floor -> floor(179/2) = 89 
-	= 16 x 89
-
-layer 2
-output2 = out_channels2 x output1(dim=1) - (kernel_size - 1)
-	= 32 x 89 - (2 - 1)
-	= 32 x 88
-divide again by pool size
-	= 32 x (floor(88/2))
-	= 32 x 44
-	
-layer 3 
-output3 = out_channels3 x output2(dim=1) - (kernel_size - 1)
-	= 64 x 43 
-divide again
-	= 64 x floor(43/2)
-	= 64 x 21
-    
-    
 """
 
