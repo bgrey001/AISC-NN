@@ -69,7 +69,7 @@ Suspiciously accurate results for the 1D_CNN (98%), investigating the cause - no
 Sat Dec 3 17:19:54 2022
 ------------------------------------------------>
 Error found in the data processing, specifically combine_datasets.py, led to jumbled sequences causing the false positives
-Problem fixed and implemented in data_preprocessing_module_v2.py and combine_datasets_v2.py, results are more believable
+Problem fixed and implemented in pre_processing_module_v2.py and combine_datasets_v2.py, results are more believable
 
 
 
@@ -121,9 +121,9 @@ GRU and CNN equations added
 Completed references
 Introduced abstract
 Appendix:
-	- Do Gantt chart for project timeline - done
-	- MVP - done
-	- Core technologies - done
+	Gantt chart for project timeline
+	MVP completed
+	Core technologies added
 	
 
     
