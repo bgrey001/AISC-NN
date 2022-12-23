@@ -13,6 +13,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import torch.nn.utils.prune as prune
+
 from pycm import *
 import math
 import numpy as np
@@ -35,10 +37,16 @@ class GRU(nn.Module):
     # =============================================================================
     # constructor
     # =============================================================================
-    def __init__(self, n_features, hidden_dim, n_layers, n_classes, seq_length, batch_size):
+    def __init__(self, n_features, hidden_dim, n_layers, n_classes, seq_length, batch_size, bidirectional):
         super(GRU, self).__init__()
         
-        self.dropout_prob = 0.1
+        bi_dim = 1
+        if bidirectional:
+            bi_dim = 2
+        
+        self.bi_dim = bi_dim
+        
+        self.dropout_prob = 0
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim  
         self.batch_size = batch_size
@@ -48,10 +56,10 @@ class GRU(nn.Module):
                           num_layers=n_layers, 
                           batch_first=True, 
                           dropout=self.dropout_prob, 
-                          bidirectional=True)
+                          bidirectional=bidirectional)
         
         # flatten and prediction layers
-        self.fc_1 = nn.Linear(hidden_dim * 2, 128)
+        self.fc_1 = nn.Linear(hidden_dim * bi_dim, 128)
         self.fc_2 = nn.Linear(128, 64)
         self.fc_3 = nn.Linear(64, n_classes)
         self.softmax = nn.LogSoftmax(dim=1)
@@ -61,24 +69,13 @@ class GRU(nn.Module):
     # =============================================================================
     def forward(self, input_x):
         
-        print(input_x.shape)
-
-        h0 = torch.zeros(self.n_layers * 2, self.batch_size, self.hidden_dim).to(self.device) # init hidden state, as it can't exist before the first forward prop
+        h0 = torch.zeros(self.n_layers * self.bi_dim, self.batch_size, self.hidden_dim).to(self.device) # init hidden state, as it can't exist before the first forward prop
         input_x, _ = self.gru(input_x, h0)
-        
-        # print(h0.shape)
-        print(input_x.shape)
         
         # prediction layers
         input_x = F.relu(self.fc_1(input_x))
-        print(input_x.shape)
-
         input_x = F.relu(self.fc_2(input_x))
-        print(input_x.shape)
-
-
         input_x = F.relu(self.fc_3(input_x))
-        print(input_x.shape)
 
         output = self.softmax(input_x)
         return output[:, -1]
@@ -103,21 +100,19 @@ class GRU_wrapper():
     # =============================================================================
     # Hyperparameters
     # =============================================================================
-    n_layers = 2
-    hidden_dim = 64
     eta = 3e-4
     alpha = 1e-4
     weight_decay = 1e-5
-    batch_size = 64
-    epochs = 5
+    epochs = 0
     optim_name = ''
     # =============================================================================
     # constructor method
     # =============================================================================
-    def __init__(self, GRU, optimizer, combine=False):
+    def __init__(self, GRU, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
         
         # init class members
         self.version_number = 0
+        self.batch_size = batch_size
 
         self.history = {'training_accuracy': [], 
                         'training_loss': [], 
@@ -148,11 +143,12 @@ class GRU_wrapper():
         self.seq_length = self.train_data.seq_length
 
         self.model = GRU(n_features=self.n_features, 
-                         hidden_dim=self.hidden_dim, 
-                         n_layers=self.n_layers, 
+                         hidden_dim=hidden_dim, 
+                         n_layers=n_units, 
                          n_classes=self.n_classes, 
                          seq_length=self.seq_length,
-                         batch_size=self.batch_size).to(self.device)
+                         batch_size=batch_size,
+                         bidirectional=bidirectional).to(self.device)
 
         match optimizer:
             case 'AdamW':
@@ -198,7 +194,7 @@ class GRU_wrapper():
         
         for epoch in range(epochs):
 
-            correct = 0
+            aggregate_correct = 0
             v_correct = 0
             train_loss_counter = 0
             valid_loss_counter = 0
@@ -226,7 +222,7 @@ class GRU_wrapper():
                 aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
             
                 if index == 0 and epoch == 0:
-                    first_accuracy = (100 * (correct / labels.size()[0]))
+                    first_accuracy = aggregate_correct
                     print(f'Initial accuracy = {first_accuracy}')
                     
                 if (index + 1) % plot_steps == 0:
@@ -389,6 +385,32 @@ class GRU_wrapper():
         self.history['class_F1_scores'] = confmat.class_stat['F1']
         self.history['class_supports'] = confmat.class_stat['P']
         
+        
+        
+    def prune_weights(self, amount):
+        parameters_to_prune = (
+            # (self.model.gru, 'all_weights'),
+            (self.model.fc_1, 'weight'),
+            (self.model.fc_2, 'weight'),
+            (self.model.fc_3, 'weight'),
+        )
+
+
+        prune.global_unstructured(
+            parameters_to_prune,
+            pruning_method=prune.L1Unstructured,
+            amount=amount,
+        )
+        
+        
+        
+    # =============================================================================
+    # method returns total parameters in the network
+    # =============================================================================
+    def total_params(self):
+        return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        
+
     
     # =============================================================================
     # method to save model to state_dict
@@ -524,7 +546,7 @@ class GRU_wrapper():
                 plt.show()
             case 'test_loss':
                 y = np.array(self.history['test_loss'])
-                x = np.arange(len(y)) # number of epochs
+                x = np.arange(len(y)) # number of epochsstrongest
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
@@ -543,7 +565,7 @@ class GRU_wrapper():
         self.confusion_matrix()
         print(f'\nModel: GRU_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
-              f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure \n{self.model.eval()}'
+              f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
               f'\nData: {self.datatype}, v{self.data_ver}, varying intervals \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
@@ -572,7 +594,7 @@ def nonrandom_init(K):
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = GRU_wrapper(GRU_v2, optimizer='AdamW')
+        model = GRU_wrapper(GRU, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=3)
         # print(models[k].history['validation_accuracy'])
@@ -584,7 +606,7 @@ def nonrandom_init(K):
         del model
         
     # save highest index 
-    with open('saved_models/history/init_histories/highest_idx.pkl', 'wb') as f:
+    with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
     
@@ -598,40 +620,40 @@ def nonrandom_init(K):
 # load the parameters of the model with the highest validation accuracy
 # =============================================================================
 def load_highest_model(model):
-    with open('saved_models/history/init_histories/highest_idx.pkl', 'rb') as f:
+    with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
     model.load_model(highest_idx, init=True)
     
     
+    
+    
 # =============================================================================
 # load the best randomly initialised network parameters for further training
 # =============================================================================
-
-model = GRU_wrapper(GRU, optimizer='AdamW', combine=False)
+# model = GRU_wrapper(GRU, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
 # load_highest_model(model)
-# print(model.history)
-model.load_model(3)
-# model.confusion_matrix()
-# model.fit(validate=True, epochs=50)
+
+
+# =============================================================================
+# testing zone
+# =============================================================================
+model = GRU_wrapper(GRU, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=True)
+model.load_model(7)
+
+# model.fit(validate=False, epochs=5)
+model.prune_weights(amount=0.2)
 model.predict()
-model.print_params()
-# model.print_summary(print_cm=(True))
-# model.fit(validate=True, epochs=30)
-# model.print_summary()
-
-# model.confusion_matrix(save_fig=(True))
-# model.save_model(4)
-# model.predict()
+model.print_summary(print_cm=(True))
+# model.save_model(7)
 
 
 
-model.plot('training_accuracy')
-model.plot('validation_accuracy')
-model.plot('training_loss')
-model.plot('validation_loss')
+# model.plot('training_accuracy')
+# model.plot('validation_accuracy')
+# model.plot('training_loss')
+# model.plot('validation_loss')
 
-# model.plot('test_accuracy')
 
 
 

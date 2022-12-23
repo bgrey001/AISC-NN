@@ -5,191 +5,99 @@
 ----------------------------------------> CNN_1D <------------------------------------------
 ============================================================================================
 
-
 TEST 1:
 ---------------------------------------->
 Model: CNN_1D_v0 -> Hyperparamters: 
-Learnig rate = 0.0003 
-Optimiser = AdamW 
+Learnig rate = 3e-05 
+Optimiser = SGD 
 Loss = CrossEntropyLoss 
-conv_l1 = 64 
+conv_l1 = 6 
 kernel_size = 3 
 pool_size = 2 
-Batch size = 128 
-Epochs = 2 
-Model structure 
+Batch size = 64 
+Epochs = 5 
+Model structure: 
 CNN_1D_v1(
-  (batch_norm_1): BatchNorm1d(5, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-  (conv_1): Conv1d(5, 64, kernel_size=(3,), stride=(1,))
+  (conv_1): Conv1d(5, 6, kernel_size=(3,), stride=(1,))
   (relu_1): ReLU()
   (pool_1): MaxPool1d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
   (flatten): Flatten(start_dim=1, end_dim=-1)
-  (fc_1): Linear(in_features=93696, out_features=128, bias=True)
-  (fc_2): Linear(in_features=128, out_features=64, bias=True)
-  (fc_3): Linear(in_features=64, out_features=6, bias=True)
+  (fc_1): Linear(in_features=8784, out_features=6, bias=True)
   (softmax): LogSoftmax(dim=1)
-)
+) 
+Total parameters = 52806
 Data: padded, v3, varying intervals 
 Sequence length = 2931 
-Batch size = 128 
+Batch size = 64 
 Shuffled = True
 
 Metric table
 =====================================================================================================================
 |  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |
 =====================================================================================================================
-|        56.298%      |      1.795      |        55.965%        |       1.796       |      56.606%    |     1.795   |
+|        56.886%      |      1.149      |        57.399%        |       1.131       |      57.880%    |     1.109   |
 =====================================================================================================================
 
 Class F1-score table
 =====================================================================================================================
 |   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |
 =====================================================================================================================
-|         72.310%        |      0.000%      |      0.000%       |     0.000%       |     0.000%     |    0.000%     |
+|         73.716%        |      0.000%     |      0.000%      |     0.000%      |     13.392%    |    0.000%    |
 =====================================================================================================================
+
 
 Predict     0           1           2           3           4           5           
 Actual
-0           12800       0           0           0           0           0           
+0           12726       0           0           0           74          0           
 
-1           2371        0           0           0           0           0           
+1           1982        0           0           0           389         0           
 
 2           293         0           0           0           0           0           
 
-3           2280        0           0           0           0           0           
+3           2260        0           0           0           20          0           
 
-4           4620        0           0           0           0           0           
+4           4252        0           0           0           368         0           
 
-5           239         0           0           0           0           0           
+5           214         0           0           0           25          0           
 
 
 Overall Statistics : 
 
-ACC Macro                                                         0.85543
-F1 Macro                                                          0.12052
-FPR Macro                                                         0.16667
-Kappa                                                             0.0
-Overall ACC                                                       0.5663
+ACC Macro                                                         0.85977
+F1 Macro                                                          0.14518
+FPR Macro                                                         0.15774
+Kappa                                                             0.06038
+Overall ACC                                                       0.5793
 PPV Macro                                                         None
 SOA1(Landis & Koch)                                               Slight
-TPR Macro                                                         0.16667
-Zero-one Loss                                                     9803
+TPR Macro                                                         0.17898
+Zero-one Loss                                                     9509
 
 Class Statistics :
 
 Classes                                                           0             1             2             3             4             5             
-ACC(Accuracy)                                                     0.5663        0.8951        0.98704       0.89913       0.7956        0.98943       
-AUC(Area under the ROC curve)                                     0.5           0.5           0.5           0.5           0.5           0.5           
+ACC(Accuracy)                                                     0.5985        0.8951        0.98704       0.89913       0.78941       0.98943       
+AUC(Area under the ROC curve)                                     0.53802       0.5           0.5           0.5           0.5257        0.5           
 AUCI(AUC value interpretation)                                    Poor          Poor          Poor          Poor          Poor          Poor          
-F1(F1 score - harmonic mean of precision and sensitivity)         0.7231        0.0           0.0           0.0           0.0           0.0           
-FN(False negative/miss/type 2 error)                              0             2371          293           2280          4620          239           
-FP(False positive/type 1 error/false alarm)                       9803          0             0             0             0             0             
-FPR(Fall-out or false positive rate)                              1.0           0.0           0.0           0.0           0.0           0.0           
+F1(F1 score - harmonic mean of precision and sensitivity)         0.73716       0.0           0.0           0.0           0.13392       0.0           
+FN(False negative/miss/type 2 error)                              74            2371          293           2280          4252          239           
+FP(False positive/type 1 error/false alarm)                       9001          0             0             0             508           0             
+FPR(Fall-out or false positive rate)                              0.91819       0.0           0.0           0.0           0.02825       0.0           
 N(Condition negative)                                             9803          20232         22310         20323         17983         22364         
 P(Condition positive or support)                                  12800         2371          293           2280          4620          239           
 POP(Population)                                                   22603         22603         22603         22603         22603         22603         
-PPV(Precision or positive predictive value)                       0.5663        None          None          None          None          None          
-TN(True negative/correct rejection)                               0             20232         22310         20323         17983         22364         
-TON(Test outcome negative)                                        0             22603         22603         22603         22603         22603         
-TOP(Test outcome positive)                                        22603         0             0             0             0             0             
-TP(True positive/hit)                                             12800         0             0             0             0             0             
-TPR(Sensitivity, recall, hit rate, or true positive rate)         1.0           0.0           0.0           0.0           0.0           0.0   
-
-NOTES: Common sense baseline -> the most frequent class is 'drifting_longlines' and as a result this model is trained only predicting this class (updated)
-
-
-TEST 2:
----------------------------------------->
-Model: CNN_1D_v0 -> Hyperparamters: 
-Learnig rate = 0.0003 
-Optimiser = SGD 
-Loss = CrossEntropyLoss 
-conv_l1 = 8 
-kernel_size = 3 
-pool_size = 2 
-Batch size = 64 
-Epochs = 35 
-Model structure 
-CNN_1D_v1(
-  (conv_1): Conv1d(5, 8, kernel_size=(3,), stride=(1,))
-  (relu_1): ReLU()
-  (pool_1): MaxPool1d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-  (flatten): Flatten(start_dim=1, end_dim=-1)
-  (fc_1): Linear(in_features=11712, out_features=6, bias=True)
-  (softmax): LogSoftmax(dim=1)
-)
-Data: padded, v3, varying intervals 
-Sequence length = 2931 
-Batch size = 64 
-Shuffled = True
-
-Metric table
-=====================================================================================================================
-|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |
-=====================================================================================================================
-|        68.748%      |      0.866      |        68.512%        |       0.910       |      69.118%    |     0.840   |
-=====================================================================================================================
-
-Class F1-score table
-=====================================================================================================================
-|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |
-=====================================================================================================================
-|         84.361%        |      31.783%     |      0.000%      |     0.000%      |     60.358%    |    0.000%    |
-=====================================================================================================================
-
-
-Predict     0           1           2           3           4           5           
-Actual
-0           11916       253         0           1           630         0           
-
-1           420         632         0           0           1319        0           
-
-2           207         42          0           0           44          0           
-
-3           1694        270         0           0           316         0           
-
-4           1180        372         0           0           3068        0           
-
-5           33          37          0           0           169         0           
-
-
-Overall Statistics : 
-
-ACC Macro                                                         0.89696
-F1 Macro                                                          0.29417
-FPR Macro                                                         0.09108
-Kappa                                                             0.44334
-Overall ACC                                                       0.69088
-PPV Macro                                                         None
-SOA1(Landis & Koch)                                               Moderate
-TPR Macro                                                         0.31026
-Zero-one Loss                                                     6987
-
-Class Statistics :
-
-Classes                                                           0             1             2             3             4             5             
-ACC(Accuracy)                                                     0.80454       0.87997       0.98704       0.89908       0.82171       0.98943       
-AUC(Area under the ROC curve)                                     0.78522       0.60921       0.5           0.49998       0.76314       0.5           
-AUCI(AUC value interpretation)                                    Good          Fair          Poor          Poor          Good          Poor          
-F1(F1 score - harmonic mean of precision and sensitivity)         0.84361       0.31783       0.0           0.0           0.60358       0.0           
-FN(False negative/miss/type 2 error)                              884           1739          293           2280          1552          239           
-FP(False positive/type 1 error/false alarm)                       3534          974           0             1             2478          0             
-FPR(Fall-out or false positive rate)                              0.3605        0.04814       0.0           5e-05         0.1378        0.0           
-N(Condition negative)                                             9803          20232         22310         20323         17983         22364         
-P(Condition positive or support)                                  12800         2371          293           2280          4620          239           
-POP(Population)                                                   22603         22603         22603         22603         22603         22603         
-PPV(Precision or positive predictive value)                       0.77126       0.39352       None          0.0           0.55319       None          
-TN(True negative/correct rejection)                               6269          19258         22310         20322         15505         22364         
-TON(Test outcome negative)                                        7153          20997         22603         22602         17057         22603         
-TOP(Test outcome positive)                                        15450         1606          0             1             5546          0             
-TP(True positive/hit)                                             11916         632           0             0             3068          0             
-TPR(Sensitivity, recall, hit rate, or true positive rate)         0.93094       0.26655       0.0           0.0           0.66407       0.0           
+PPV(Precision or positive predictive value)                       0.58572       None          None          None          0.42009       None          
+TN(True negative/correct rejection)                               802           20232         22310         20323         17475         22364         
+TON(Test outcome negative)                                        876           22603         22603         22603         21727         22603         
+TOP(Test outcome positive)                                        21727         0             0             0             876           0             
+TP(True positive/hit)                                             12726         0             0             0             368           0             
+TPR(Sensitivity, recall, hit rate, or true positive rate)         0.99422       0.0           0.0           0.0           0.07965       0.0          
 
 NOTES: Minimal model         
 
 
 
-TEST 3:
+TEST 2:
 ---------------------------------------->
 Model: CNN_1D_v6 -> Hyperparamters: 
 Learnig rate = 0.0003 
@@ -200,7 +108,7 @@ kernel_size = 3
 pool_size = 2 
 Batch size = 128 
 Epochs = 30 
-Model structure 
+Model structure: 
 CNN_1D_v2(
   (conv_1): Conv1d(5, 64, kernel_size=(3,), stride=(1,))
   (batch_norm_1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
@@ -229,10 +137,12 @@ CNN_1D_v2(
   (fc_3): Linear(in_features=64, out_features=6, bias=True)
   (softmax): LogSoftmax(dim=1)
 )
+Total parameters = 6064966
 Data: padded, v3, varying intervals 
 Sequence length = 2931 
 Batch size = 128 
 Shuffled = True
+Post training L1-norm global unstructured trainable weight pruning: 0.51
 
 Metric table
 =====================================================================================================================
@@ -295,5 +205,122 @@ TON(Test outcome negative)                                        9790          
 TOP(Test outcome positive)                                        12813         2487          297           2119          4653          234           
 TP(True positive/hit)                                             12426         2036          232           1908          4273          205           
 TPR(Sensitivity, recall, hit rate, or true positive rate)         0.97078       0.85871       0.79181       0.83684       0.92489       0.85774  
+
+
+
+TEST 2:
+---------------------------------------->
+Model: CNN_1D_v4 -> Hyperparamters: 
+Learnig rate = 0.0003 
+Optimiser = AdamW 
+Loss = CrossEntropyLoss 
+conv_l1 = 64 
+kernel_size = 3 
+pool_size = 2 
+Batch size = 128 
+Epochs = 5 
+Model structure: 
+CNN_1D_v2(
+  (conv_1): Conv1d(5, 64, kernel_size=(3,), stride=(1,))
+  (batch_norm_1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+  (relu): ReLU()
+  (maxpool): MaxPool1d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+  (res_block_1): ResBlock(
+    (conv_1): Conv1d(64, 64, kernel_size=(3,), stride=(1,), padding=(1,))
+    (batch_norm_1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (conv_2): Conv1d(64, 64, kernel_size=(3,), stride=(1,), padding=(1,))
+    (batch_norm_2): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (relu): LeakyReLU(negative_slope=0.01)
+  )
+  (res_block_2): ResBlock(
+    (conv_1): Conv1d(64, 64, kernel_size=(3,), stride=(1,), padding=(1,))
+    (batch_norm_1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (conv_2): Conv1d(64, 64, kernel_size=(3,), stride=(1,), padding=(1,))
+    (batch_norm_2): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (relu): LeakyReLU(negative_slope=0.01)
+  )
+  (avgpool): AvgPool1d(kernel_size=(2,), stride=(2,), padding=(0,))
+  (conv_2): Conv1d(64, 128, kernel_size=(3,), stride=(1,))
+  (batch_norm_2): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+  (flatten): Flatten(start_dim=1, end_dim=-1)
+  (fc_1): Linear(in_features=46720, out_features=128, bias=True)
+  (fc_2): Linear(in_features=128, out_features=64, bias=True)
+  (fc_3): Linear(in_features=64, out_features=6, bias=True)
+  (softmax): LogSoftmax(dim=1)
+) 
+Total parameters = 6064966
+Data: padded, v3, varying intervals 
+Sequence length = 2931 
+Batch size = 128 
+Shuffled = True
+
+Metric table
+=====================================================================================================================
+|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |
+=====================================================================================================================
+|        95.439%      |      0.111      |        93.029%        |       0.175       |      93.305%    |     0.194   |
+=====================================================================================================================
+
+Class F1-score table
+=====================================================================================================================
+|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |
+=====================================================================================================================
+|         97.060%        |      83.855%     |      78.859%      |     86.791%      |     92.220%    |    86.864%    |
+=====================================================================================================================
+
+
+Predict     0           1           2           3           4           5           
+Actual
+0           12428       121         52          93          106         0           
+
+1           54          2036        1           67          191         22          
+
+2           51          0           235         6           1           0           
+
+3           173         110         14          1912        67          4           
+
+4           103         200         1           41          4273        2           
+
+5           0           18          0           7           9           205         
+
+
+Overall Statistics : 
+
+ACC Macro                                                         0.97767
+F1 Macro                                                          0.87608
+FPR Macro                                                         0.01611
+Kappa                                                             0.89122
+Overall ACC                                                       0.93302
+PPV Macro                                                         0.87731
+SOA1(Landis & Koch)                                               Almost Perfect
+TPR Macro                                                         0.87549
+Zero-one Loss                                                     1514
+
+Class Statistics :
+
+Classes                                                           0             1             2             3             4             5             
+ACC(Accuracy)                                                     0.96669       0.96531       0.99443       0.97425       0.9681        0.99726       
+AUC(Area under the ROC curve)                                     0.96604       0.91826       0.8995        0.91403       0.95205       0.92824       
+AUCI(AUC value interpretation)                                    Excellent     Excellent     Very Good     Excellent     Excellent     Excellent     
+F1(F1 score - harmonic mean of precision and sensitivity)         0.9706        0.83855       0.78859       0.86791       0.9222        0.86864       
+FN(False negative/miss/type 2 error)                              372           335           58            368           347           34            
+FP(False positive/type 1 error/false alarm)                       381           449           68            214           374           28            
+FPR(Fall-out or false positive rate)                              0.03887       0.02219       0.00305       0.01053       0.0208        0.00125       
+N(Condition negative)                                             9803          20232         22310         20323         17983         22364         
+P(Condition positive or support)                                  12800         2371          293           2280          4620          239           
+POP(Population)                                                   22603         22603         22603         22603         22603         22603         
+PPV(Precision or positive predictive value)                       0.97026       0.81932       0.77558       0.89934       0.91952       0.87983       
+TN(True negative/correct rejection)                               9422          19783         22242         20109         17609         22336         
+TON(Test outcome negative)                                        9794          20118         22300         20477         17956         22370         
+TOP(Test outcome positive)                                        12809         2485          303           2126          4647          233           
+TP(True positive/hit)                                             12428         2036          235           1912          4273          205           
+TPR(Sensitivity, recall, hit rate, or true positive rate)         0.97094       0.85871       0.80205       0.8386        0.92489       0.85774    
+
+NOTES: Added pruning, marginal increase in test accuracy
+
+
+
+
+
 """
 

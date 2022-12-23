@@ -47,7 +47,7 @@ class CNN_1D_v1(nn.Module):
 
         # flatten and prediction layers
         self.flatten = nn.Flatten()
-        self.fc_1 = nn.Linear(11712, 6)
+        self.fc_1 = nn.Linear(8784, 6)
         self.softmax = nn.LogSoftmax(dim=1)
 
     # =============================================================================
@@ -87,10 +87,10 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Hyperparameters
     # =============================================================================
-    conv_l1 = 8
+    conv_l1 = 6
     kernel_size = 3
     pool_size = 2
-    eta = 3e-4
+    eta = 3e-5
     alpha = 1e-4
     weight_decay = 1e-5
     batch_size = 64
@@ -369,6 +369,15 @@ class CNN_1D_wrapper():
         self.history['class_F1_scores'] = confmat.class_stat['F1']
         self.history['class_supports'] = confmat.class_stat['P']
         
+        
+        
+    # =============================================================================
+    # method returns total parameters in the network
+    # =============================================================================
+    def total_params(self):
+        return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            
+        
     
     # =============================================================================
     # method to save model to state_dict
@@ -526,7 +535,7 @@ class CNN_1D_wrapper():
         print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'conv_l1 = {self.conv_l1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
-              f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure \n{self.model.eval()}'
+              f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
               f'\nData: {self.datatype}, v{self.data_ver}, varying intervals \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
@@ -556,7 +565,7 @@ def nonrandom_init(K):
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW')
+        model = CNN_1D_wrapper(CNN_1D_v1, optimizer='AdamW')
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=3)
         # print(models[k].history['validation_accuracy'])
@@ -590,36 +599,23 @@ def load_highest_model(model):
     
     
 # =============================================================================
-# load the best randomly initialised network parameters for further training
+# testing zone
 # =============================================================================
-
 model = CNN_1D_wrapper(CNN_1D_v1, optimizer='SGD', combine=False)
-# load_highest_model(model)
 # print(model.history)
-# model.load_model(4)
-model.fit(validate=True, epochs=35)
+# model.load_model(5)
+model.fit(validate=True, epochs=4)
 model.predict()
-# model.confusion_matrix(print_confmat=(True), save_fig=False)
-# print("{:1d}".format(round(100 * model.history["class_F1_scores"][0])))
-
-
 model.print_summary(print_cm=(True))
-
 model.print_params()
 
-# model.fit(validate=True, epochs=30)
-# model.print_summary()
-
-# model.confusion_matrix()
-model.save_model(5)
-# model.predict()
 
 
 
-model.plot('training_accuracy')
-model.plot('validation_accuracy')
-model.plot('training_loss')
-model.plot('validation_loss')
+# model.plot('training_accuracy')
+# model.plot('validation_accuracy')
+# model.plot('training_loss')
+# model.plot('validation_loss')
 
 # model.plot('test_accuracy')
 

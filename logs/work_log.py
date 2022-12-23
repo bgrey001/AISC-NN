@@ -81,8 +81,12 @@ Implemented GRU, starting with 1 GRU module, no droupout and mono directional. R
 
 Wed Dec 7 19:29:36 2022
 ------------------------------------------------>
-Stacked, bidirectional GRU with dropout and 128 hidden units is performing excellently on the padded, featurised data with final results of 95% test accuracy
+Stacked, bidirectional GRU with dropout and 128 hidden units is performing excellently on the padded, featurised data with final results of 95% test accuracy, when utilising custom non-random initialisation technique
 Very stable training, clearly a strong model for time series data, even irregular data 
+
+Thu Dec 8 21:15:27 2022
+------------------------------------------------>
+Introduced L1-norm global unstructured weight pruning to push the results of both the GRU and CNN to higher accuracies on test data
 
 
 Fri Dec 9 21:51:29 2022
@@ -133,6 +137,7 @@ BACKLOG:
 * Train classification networks on the non-linearly interpolated data and gain best possible results
 * Implement SVM on all data pipelines for comparison
 * Begin evaluation of results
+* Introduce time measurement during prediction to see the efficiency of performance -> important for deployment
 * Research applications for real time data
    
    
@@ -145,7 +150,7 @@ Collated and padded varying sequence lengths:
 		Two options for combine_datasets.py:
 			1) Process the raw data from csv and save as parquet
 			2) Just load from previously saved parquet and do final processing
-	2) In combine_datasets.py once the data has had prelim processing and is aggregated, the sequences are shuffled, split, flattened and then 			normalised before re-segmenting into original sequences using a mask. This process, although rather convoluted maintains the sequences, while splitting and normalising the data fairly i.e. maintains anonymity of test and validation data for the model training
+	2) In combine_datasets.py once the data has had prelim processing and is aggregated, the sequences are shuffled, split, flattened then normalised before re-segmenting into original sequences using a mask. This process, although rather convoluted maintains the sequences, while splitting and normalising the data fairly i.e. maintains anonymity of test and validation data for the model training
 	3) Implementing customised PyTorch classes Dataset (AIS_loader.py) and DataLoader is preserving memory for the padded sequences as using load_data class was consuming too much of the GPU VRAM.
 	4) Although the padding is extensive, the models are training efficiently on the data
 	
