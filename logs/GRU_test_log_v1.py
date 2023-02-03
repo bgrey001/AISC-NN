@@ -457,7 +457,7 @@ Learnig rate = 0.0003
 Optimiser = AdamW 
 Loss = CrossEntropyLoss 
 Batch size = 64 
-Epochs = 0 
+Epochs = 70 
 Model structure: 
 GRU(
   (gru): GRU(5, 64, num_layers=2, batch_first=True, bidirectional=True)

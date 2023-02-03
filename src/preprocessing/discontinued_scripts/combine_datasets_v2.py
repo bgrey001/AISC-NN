@@ -7,6 +7,10 @@ Created on Thu Nov 24 18:48:15 2022
 
 Combining datasets for varying time sequences
 
+Data fields:
+    
+speed | lat | lon | delta_time | delta_course | target
+
 """
 
 import pandas as pd
@@ -45,12 +49,12 @@ match choice:
     case 'varying':
         
         load_version = 3
-        save_version = 3
+        save_version = 4 # current latest version is 4
         n_features = 5
         time_period = 24
         threshold = 1
         saving_parquet = True
-        saving = False
+        saving = True
         
         aggregate_mask = []
         drop_columns = ['mmsi', 'distance_from_shore', 'distance_from_port', 'delta_t_cum', 'course', 'is_fishing', 'delta_t', 'desired', 'timestamp']
@@ -124,16 +128,8 @@ match choice:
         # instantiate empty preprocessing module for the operations to follow
         module = ppm.pre_processing_module("")
         
-        
-        
         # rebuild the sequences using the mask, then we shuffle and create more masks
         df_list = module.re_segment(aggregate_df, aggregate_mask, dataframe=True)
-        
-        
-        single = aggregate_df.iloc[24:24 + 35, :]
-        single_2 = df_list[3]
-        plt.plot(single['lat'], single['lon'])
-        plt.plot(single_2['lat'], single_2['lon'])
 
         # find max sequence length for padding process
         total_ = 0
@@ -148,9 +144,6 @@ match choice:
         random.seed(15)
         random.shuffle(df_list)
 
-        single_3 = df_list[0]
-        plt.plot(single_3['lat'], single_3['lon'])
-        
         # split the data while it's in batches
         batch_train, batch_valid, batch_test = module.split(df_list, train_ratio=(0.8))
         total = len(aggregate_df)
@@ -162,7 +155,8 @@ match choice:
         # print(len(batch_train_flat) + len(batch_valid_flat) + len(batch_test_flat)) # only 3 off the original size of the data 
         
         # now we normalise
-        scaler = StandardScaler()
+        scaler = MinMaxScaler()
+        # scaler = StandardScaler()
         
         # covert dataframes to arrays
         data_train = batch_train_flat.values 
@@ -170,35 +164,26 @@ match choice:
         data_test = batch_test_flat.values
         
         # scale
-        norm_train = scaler.fit_transform(data_train[:, [0, 1, 2, 4]])
-        norm_valid = scaler.transform(data_valid[:, [0, 1, 2, 4]])
-        norm_test = scaler.transform(data_test[:, [0, 1, 2, 4]])
-        # print(len(norm_train) + len(norm_valid) + len(norm_test)) # only 3 off the original size of the data 
+        scale_train = scaler.fit_transform(data_train[:, [0, 1, 2, 4]])
+        scale_valid = scaler.transform(data_valid[:, [0, 1, 2, 4]])
+        scale_test = scaler.transform(data_test[:, [0, 1, 2, 4]])
+        # print(len(scale_train) + len(scale_valid) + len(scale_test)) # only 3 off the original size of the data 
         
         # convert nans to prevent vanishing gradient
-        norm_train = np.nan_to_num(norm_train)
-        norm_valid = np.nan_to_num(norm_valid)
-        norm_test = np.nan_to_num(norm_test)
+        scale_train = np.nan_to_num(scale_train)
+        scale_valid = np.nan_to_num(scale_valid)
+        scale_test = np.nan_to_num(scale_test)
         
-        # add normalised columns back to data arrays
-        data_train[:, [0, 1, 2, 4]] = norm_train
-        data_valid[:, [0, 1, 2, 4]] = norm_valid
-        data_test[:, [0, 1, 2, 4]] = norm_test
+        # add normalised columns back to data arrays, index of 3 is the already normalised time delta which needed custom normalisation
+        data_train[:, [0, 1, 2, 4]] = scale_train
+        data_valid[:, [0, 1, 2, 4]] = scale_valid
+        data_test[:, [0, 1, 2, 4]] = scale_test
         # print(len(data_train) + len(data_valid) + len(data_test)) # only 3 off the original size of the data 
         
         # rebuild time sequences
         data_train_seqs = module.re_segment(data_train, batch_train_mask, dataframe=False)
         data_valid_seqs = module.re_segment(data_valid, batch_valid_mask, dataframe=False)
         data_test_seqs = module.re_segment(data_test, batch_test_mask, dataframe=False)
-        
-        # counter = 0
-        # for i in data_train_seqs:
-        #     counter += len(i)
-        # for i in data_valid_seqs:
-        #     counter += len(i)
-        # for i in data_test_seqs:
-        #     counter += len(i)
-        # print(total - counter) # it works!
         
         # =============================================================================
         # save

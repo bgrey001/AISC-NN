@@ -93,9 +93,7 @@ class GRU_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    dataset = 'varying' # being padded in the AIS_loader class
-    datatype = 'padded'
-    data_ver = '3'
+    data_ver = '4'
     shuffle = True
     # =============================================================================
     # Hyperparameters
@@ -108,12 +106,13 @@ class GRU_wrapper():
     # =============================================================================
     # constructor method
     # =============================================================================
-    def __init__(self, GRU, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
+    def __init__(self, GRU, dataset, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
         
         # init class members
+        self.dataset = dataset
         self.version_number = 0
         self.batch_size = batch_size
-
+        
         self.history = {'training_accuracy': [], 
                         'training_loss': [], 
                         'validation_accuracy': [], 
@@ -566,7 +565,7 @@ class GRU_wrapper():
         print(f'\nModel: GRU_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
-              f'\nData: {self.datatype}, v{self.data_ver}, varying intervals \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
+              f'\nData: {self.dataset}, v{self.data_ver}, \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
         print('\nMetric table')
@@ -638,11 +637,11 @@ def load_highest_model(model):
 # =============================================================================
 # testing zone
 # =============================================================================
-model = GRU_wrapper(GRU, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=True)
-model.load_model(7)
+model = GRU_wrapper(GRU, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=False)
+# model.load_model(7)
 
-# model.fit(validate=False, epochs=5)
-model.prune_weights(amount=0.2)
+model.fit(validate=True, epochs=1)
+# model.prune_weights(amount=0.2)
 model.predict()
 model.print_summary(print_cm=(True))
 # model.save_model(7)

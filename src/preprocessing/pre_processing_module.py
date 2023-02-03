@@ -2,46 +2,43 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thur Nov 24 14:30:07 2022
-
 @author: BenedictGrey
 
-Pre-processing module class v2
-
+Pre-processing module class current version
 
 """
-
 import numpy as np
 from numpy import random
 import pandas as pd
-
 import warnings
 from pandas.core.common import SettingWithCopyWarning
-
-import dask.dataframe as dd
-
 import matplotlib.pyplot as plt
-import torch
 from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import MinMaxScaler, Normalizer, StandardScaler
 from sklearn.model_selection import train_test_split
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning) # ignore warning for creating views instead of copies
 
+
+# =============================================================================
+# all purpose preprocessing utility used in multiple scripts across AISC-NN
+# =============================================================================
 class pre_processing_module:
-    
-    
     # =============================================================================
     # constructor method to initialise attributes, import dataset and execute integer encoding
     # =============================================================================
-    def __init__(self, dataset):
+    def __init__(self, dataset, sample_size=None):
         
         # init attributes
         if dataset:
+            print(f'Processing {dataset} dataset...')
             self.dataset = dataset
             self.df = pd.read_csv('../../data/csv/' + dataset + '.csv')
             self.df['timestamp'] = pd.to_datetime(self.df.timestamp, unit='s')
             self.df = self.df.drop(columns=['source'])
+            
+            if sample_size is not None:
+                self.df = self.df.head(sample_size)
             
             # fits the integer encoding model and transforms the label to it's given integer value
             le = LabelEncoder()
@@ -50,7 +47,6 @@ class pre_processing_module:
             self.desired = dataset
             self.desired = le.transform([self.desired])
             self.df['desired'] = self.desired[0]
-        
 
     # =============================================================================
     # helper method to divide the dataset based on their maritime mobile service identity (mmsi)
@@ -64,15 +60,12 @@ class pre_processing_module:
             vessel_list.append(temp_df)
         return vessel_list
     
-    
     # =============================================================================
     # helper method to break unique dataframes into time periods
     # =============================================================================
     def segment_dataframe(self, dataframe, time_period, threshold): # must be run on unique dataframes, output of partition_vessels will do nicely
-        
         # list to be returned
         list_df = []
-        # max_seq_length = 510
         
         # set first timestamp and the time difference threshold
         t0 = dataframe['timestamp'].iloc[0]
@@ -81,10 +74,8 @@ class pre_processing_module:
 
         initial_index = 0
         for i in range(0, len(dataframe)):
-            
             curr_t = dataframe['timestamp'].iloc[i]
             curr_dif = curr_t - t0 # difference from current time to first time
-
             if (curr_dif >= delta_size):
                 # make sure size is meaningful (greater than threshold)
                 if ((i - initial_index) > threshold):     
@@ -93,10 +84,8 @@ class pre_processing_module:
                 # if uniform: # pad with zeroes to be the same length as the largest sequence
                 t0 = dataframe['timestamp'].iloc[i]
                 initial_index = i
-                
                         
         return list_df
-    
     
     # =============================================================================
     # helper method that featurises the time differences between items in the sequence
@@ -105,7 +94,6 @@ class pre_processing_module:
     def create_deltas(self, list_df, interpolated, drop_columns): # also removing some undesirable columns
         total_num_seconds = 86400 # in 24 hours
         for df in list_df:
-            
             if not interpolated:
                 # time deltas 
                 df['delta_t'] = (df['timestamp']-df['timestamp'].shift()).fillna(pd.Timedelta(seconds=0)) # compute change in time for each timestep and create feature delta_t
@@ -123,41 +111,25 @@ class pre_processing_module:
             # df = df.drop(columns=['desired'])
             df = df.drop(columns=drop_columns, inplace=True)
             
-            # remains to be seen if we need to scale lat and lon
         return list_df
     
     # =============================================================================
     # helper method that calls segment_dataframes
     # =============================================================================
     def build_sequences(self, time_period, threshold, drop_columns):
-
-        
         list_df = self.partition_vessels()
         df_list_seq = []
         
         # first, segment the datframes
         for df in list_df:    
             df_list_seq.append(self.segment_dataframe(dataframe=df, time_period=time_period, threshold=threshold))
-                
-        
+            
         # now calculate deltas
         for list_df in df_list_seq:
             list_df = self.create_deltas(list_df=list_df, interpolated=False, drop_columns=drop_columns)
         
         return df_list_seq
-        # return self.create_deltas(list_df=df_list_seq, interpolated=False)
-            
-        # # return df_list_seq
-        # sequences = [item for sub_list in df_list_seq for item in sub_list]
-        
-        # # convert to numpy arrays
-        # for i in range(len(sequences)): 
-        #     sequences[i] = sequences[i].to_numpy()
-            
-        # # print(f'Number of sequences in the dataset: {len(sequences)}')
-        # return sequences
-        
-        
+
         
         
     # =============================================================================
@@ -204,69 +176,63 @@ class pre_processing_module:
 
 
     # =============================================================================
-    # helper method that calls build_sequences on the train and test lists to return the fully processed lists of sequences
-    # =============================================================================
-    def return_test_train_sets(self, uniform, interpolated=False):
-        
-        if interpolated:
-            time_interval = 5 # in minutes, how far apart each interval should be
-            return self.return_interpolated_data(time_interval=time_interval, fixed_window=True)
-       
-        drop_columns = ['mmsi', 'timestamp', 'distance_from_shore', 'distance_from_port', 'delta_t', 'delta_t_cum', 'course', 'speed']
-        
-        threshold = 150 # this is the minimum that a sequence can be to be included in the dataset
-        time_period = 24 # this is the length of each time window in hours
-        
-        
-        # df = self.partition_vessels()
-        # df_list = self.create_deltas(list_df=df, interpolated=False)
-        # list_train, list_valid, list_test = self.split(df_list)
-
-        
-        # return list_train_seq, list_valid_seq, list_test_seq
-        
-    
-
-    # =============================================================================
     # helper method that splits the data into train and test sets and then normalises based on the data in the train sets
     # =============================================================================
-    def split(self, df, train_ratio): # takes as input the output of create_deltas()
+    def split(self, data, train_ratio): # takes as input the output of create_deltas()
         
         # shuffle must be false as we need to preserve the order of the time sequences 
-        data_train, data_rem = train_test_split(df, train_size=train_ratio, random_state=None, shuffle=False, stratify=None)
+        data_train, data_rem = train_test_split(data, train_size=train_ratio, random_state=None, shuffle=False, stratify=None)
         data_valid, data_test = train_test_split(data_rem, test_size=0.5, random_state=None, shuffle=False, stratify=None)
 
         return data_train, data_valid, data_test
 
     
     # =============================================================================
-    # @output returns a list of np.arrays containing the interpolated values for lat and long (currently - planning to expand to have other features)   
+    # @output returns a single dataframe of interpolated vessels
     # @params - vessel list is output of partition_vessels() method, target interval is the size of the time steps
     # =============================================================================
-    def linear_interpolation(self, vessel_list, target_interval):
-        
-        list_output_resampled = []
-        list_output = []
+    def linear_interpolation(self, vessel_list, target_interval, visualise=False):
+        drop_columns = ['timestamp', 'mmsi', 'distance_from_shore', 'distance_from_port', 'is_fishing']
+    
+        # prepare master dataframe
+        df_ex = vessel_list[0]
+        df = pd.DataFrame().reindex_like(df_ex).dropna()
+        df.drop(columns=drop_columns, inplace=True)
+    
+        df_orig = df.copy()
+        del df_ex # keep memory clean
     
         for v in vessel_list:
-            
-            v.index = v['timestamp']
+            # =============================================================================
+            # Resample each vessel
+            # =============================================================================
+            v.index = v['timestamp'] # set index to timestamp
             v.index.name = 'index'
-
-            # invert boolean series to remove duplicates of timestamps
+            v.drop(columns=drop_columns, inplace=True)
             v = v[~v.index.duplicated(keep='first')]
-            list_output.append(v)
-
-            # upsample the dataframe using the mean dispatching function
-            v = v.resample(str(target_interval) + 'T').mean()
+            resampled_v = v.resample(str(target_interval) + 'T').mean()
             
-            # use linear interpolation to fill the gaps in the data
-            v = v.interpolate(method='linear')
-     
-            # list_output_resampled.append(np.array(v.values)) # coverts to numpy array
-            list_output_resampled.append(v)
-        
-        return list_output_resampled
+            # =============================================================================
+            # Linear interpolation
+            # =============================================================================
+            resampled_v = resampled_v.interpolate(method='linear')
+            
+            # =============================================================================
+            # Combine vessels into master dataframe
+            # =============================================================================
+            df = pd.concat([df, resampled_v])
+            df_orig = pd.concat([df_orig, v])
+            
+            # =============================================================================
+            # Visualise the difference between the intepolated and original trajectories
+            # =============================================================================
+            if visualise:
+                plt.plot(v['lat'], v['lon'])
+                plt.show()
+                plt.plot(resampled_v['lat'], resampled_v['lon'], c='green')
+                plt.show()
+    
+        return df
 
 
 
@@ -326,79 +292,6 @@ class pre_processing_module:
                     batches.append(v[i:(i+t_steps), :])
         return batches
       
-    
-    
-    # =============================================================================
-    # method to remove outliers with insignificant course changes
-    # =============================================================================
-    def remove_outliers(self, batches): # takes as input the output of the sliding_window functions
-        
-        
-        
-        
-        return
-        
-        
-        
-        
-    # =============================================================================
-    # method to return the linearly interpolated time series data in train, test and valid splits
-    # =============================================================================
-    def return_interpolated_data(self, time_interval, fixed_window):
-        
-        # variable dependant on what's required to make 24 hour batches
-        batch_size = 1440 / time_interval
-        lag = 3 #  lag to delay the sliding window
-        
-        vessel_list = self.partition_vessels()
-        interpolated_vessels = self.linear_interpolation(vessel_list=vessel_list, target_interval=time_interval)
-        
-        # remove outliers step
-        
-        # df_list = self.create_deltas(list_df=interpolated_vessels, interpolated=True)
-        
-        # return self.split(df_list) # temp
-        
-        
-        if fixed_window:
-            df_list = self.fixed_window(interpolated_vessels, batch_size)
-        else:
-            df_list = self.sliding_window(interpolated_vessels, batch_size, lag)
-            
-        return df_list
-    
-        # print(f'Number of train sequences in the dataset: {len(self.list_train_data)}')
-        # print(f'Number of val sequences in the dataset: {len(self.list_valid_data)}')
-        # print(f'Number of test sequences in the dataset: {len(self.list_test_data)}')
-        
-        
-        # list_train, list_valid, list_test = self.split(df_list)
-
-        # return self.list_train_data, self.list_valid_data, self.list_test_data
-    
-    
-    
-            
-    
-    # @classmethod
-    # =============================================================================
-    # method that automates the instantiation and building of the tensor 
-    # @param time_interval: is in minues - how long the time windows will be
-    # @param sliding_window: bool value that creates a sliding window if True and uses fixed windows of 24 hours if not
-    # =============================================================================
-    def build_tensor(self, time_interval, sliding_window):
-        
-        # variable dependant on what's required to make 24 hour batches
-        batch_size = 1440 / time_interval
-        
-        ppm = pre_processing_module(self.dataset)
-        vessel_list = ppm.partition_vessels()
-        iv = ppm.linear_interpolation(vessel_list, time_interval)
-        
-        if (sliding_window == True):
-            return ppm.sliding_window_tensor(iv, batch_size)
-        else:
-            return ppm.fixed_window_tensor(iv, batch_size)
     
     
     # @classmethod

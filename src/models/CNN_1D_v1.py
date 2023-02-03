@@ -67,7 +67,7 @@ class ResBlock(nn.Module):
 
 
 
-class CNN_1D_v2(nn.Module):
+class CNN_1D(nn.Module):
 
     # =============================================================================
     # class attributes
@@ -78,7 +78,7 @@ class CNN_1D_v2(nn.Module):
     # constructor
     # =============================================================================
     def __init__(self, n_features, n_classes, seq_length, conv_l1, kernel_size, pool_size):
-        super(CNN_1D_v2, self).__init__()
+        super(CNN_1D, self).__init__()
 
         # calculate channel sizes for the different convolution layers
         conv_l2 = 2 * conv_l1
@@ -160,14 +160,6 @@ class CNN_1D_v2(nn.Module):
         output = self.softmax(input_x)
         
         return output
-        
-
-
-
-
-
-
-
 
 # =============================================================================
 # wrapper class for an instance of the CNN_1D model
@@ -182,9 +174,9 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    dataset = 'varying' # being padded in the AIS_loader class
-    datatype = 'padded'
-    data_ver = '3'
+    dataset = 'linear_interp' # being padded in the AIS_loader class
+    datatype = 'linearly interpolated'
+    data_ver = '4'
     shuffle = True
     # =============================================================================
     # Hyperparameters
@@ -279,8 +271,10 @@ class CNN_1D_wrapper():
 
         # instantiate DataLoader
         train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.CNN_collate)
+        # train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle)
         if validate:
             valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.CNN_collate)
+            # valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle)
 
         for epoch in range(epochs):
 
@@ -390,7 +384,11 @@ class CNN_1D_wrapper():
         test_correct = test_loss_counter = test_loss = 0
         test_print_steps = 20
         
+        # for varying padded data
         test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.CNN_collate)
+        
+        # for linearly interpolated
+        # test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle)
         test_index = 0
         for test_features, test_labels, lengths in test_generator:
             self.model.eval()
@@ -670,7 +668,7 @@ class CNN_1D_wrapper():
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'conv_l1 = {self.conv_l1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
-              f'\nData: {self.datatype}, v{self.data_ver}, varying intervals \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
+              f'\nData: {self.datatype}, v{self.data_ver}, \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
         print('\nMetric table')
@@ -742,14 +740,14 @@ def load_highest_model(model):
 # =============================================================================
 # testing zone
 # =============================================================================
-model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW', combine=True)
-model.load_model(4)
-model.prune_weights(amount=0.51)
-model.predict()
+model = CNN_1D_wrapper(CNN_1D, optimizer='AdamW', combine=False)
+# model.load_model(4)
+model.fit(validate=True, epochs=10)
+# model.prune_weights(amount=0.51)
+# model.predict()
 # model.print_params()
-# model.fit(validate=False, epochs=10)
 # model.print_summary(print_cm=(True))
-# model.save_model(4)
+# model.save_model(5)
 
 
 # model.plot('training_accuracy')
