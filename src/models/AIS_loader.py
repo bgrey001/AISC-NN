@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov 28 11:18:55 2022
-
 @author: benedict
 
 Script implementing customised PyTorch Dataset and DataLoader classes
 
 Data fields for:
+    
     Varying time series:
         speed | lat | lon | delta_time | delta_course | target
+        
     Linearly interpolated time series:
         speed | course | lat | lon | desired
 
@@ -22,7 +23,6 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import random
 import pickle
-
 import matplotlib.pyplot as plt
 
 class AIS_loader(Dataset):
@@ -33,8 +33,6 @@ class AIS_loader(Dataset):
 #     feature columns: speed, lat, lon, time_delta, course_delta
 #     input shape: batch_size, n_features, seq_length
 # =============================================================================
-    
-    
     def __init__(self, choice, split, version, split_2=None):
         random.seed(15) # set random seed to reproduce random results
         with open(f'../../data/pkl/{choice}/{split}_v{version}.pkl', 'rb') as f:
@@ -65,78 +63,38 @@ class AIS_loader(Dataset):
     # converts the irregularly sized sequences into the same lengths (taking the max length of all the sequences)
     # =============================================================================
     def CNN_collate(self, data):
-        
         seqs, labels, lengths = zip(*data)
-        max_len = self.seq_length
-        n_features = 5
     
-        sequences = torch.zeros(len(data), max_len, n_features) # create empty padded tensor to fill in loop below
+        sequences = torch.zeros(len(data), int(self.seq_length), int(self.n_features)) # create empty padded tensor to fill in loop below
         labels = torch.tensor(labels)
         lengths = torch.tensor(lengths)
         
         for i in range(len(data)):
             j, k = data[i][0].size(0), data[i][0].size(1)
-            sequences[i] = torch.cat([data[i][0], torch.zeros((max_len - j, k))])
+            sequences[i] = torch.cat([data[i][0], torch.zeros((int(self.seq_length) - j, k))])
         
         sequences = torch.transpose(input=sequences, dim0=1, dim1=2) # transpose sequences
-        
         return sequences.float(), labels.long(), lengths.long()
     
     
+    
     # =============================================================================
-    # Collate function for linearly interpolated data
+    # same as CNN_collate but doesn't transpose the matrix 
     # =============================================================================
-    def CNN_collate_LI(self, data):
-        
-        seqs, labels, lengths = zip(*data)
-        max_len = int(self.seq_length)
-        n_features = 4
-    
-        sequences = torch.zeros(len(data), max_len, n_features) # create empty padded tensor to fill in loop below
-        labels = torch.tensor(labels)
-        lengths = torch.tensor(lengths)
-        
-        for i in range(len(data)):
-            j, k = data[i][0].size(0), data[i][0].size(1)
-            sequences[i] = torch.cat([data[i][0], torch.zeros((max_len - j, k))])
-        
-        sequences = torch.transpose(input=sequences, dim0=1, dim1=2) # transpose sequences
-        
-        return sequences.float(), labels.long(), lengths.long()
-    
-    
     def GRU_collate(self, data):
         seqs, labels, lengths = zip(*data)
-        max_len = int(self.seq_length)
-        # n_features = 5
+        int(self.seq_length)
     
-        sequences = torch.zeros(len(data), max_len, self.n_features) # create empty padded tensor to fill in loop below
+        sequences = torch.zeros(len(data), int(self.seq_length), self.n_features) # create empty padded tensor to fill in loop below
         labels = torch.tensor(labels)
         lengths = torch.tensor(lengths)
         
         for i in range(len(data)):
             j, k = data[i][0].size(0), data[i][0].size(1)
-            sequences[i] = torch.cat([data[i][0], torch.zeros((max_len - j, k))])
-        
+            sequences[i] = torch.cat([data[i][0], torch.zeros((int(self.seq_length) - j, k))])
         
         return sequences.float(), labels.long(), lengths.long()
     
-    
-    # def GRU_collate_LI(self, data):
-    #     seqs, labels, lengths = zip(*data)
-    #     max_len = int(self.seq_length)
-    #     n_features = 4
-    
-    #     sequences = torch.zeros(len(data), max_len, n_features) # create empty padded tensor to fill in loop below
-    #     labels = torch.tensor(labels)
-    #     lengths = torch.tensor(lengths)
-        
-    #     for i in range(len(data)):
-    #         j, k = data[i][0].size(0), data[i][0].size(1)
-    #         sequences[i] = torch.cat([data[i][0], torch.zeros((max_len - j, k))])
-        
-        
-    #     return sequences.float(), labels.long(), lengths.long()
 
         
     # =============================================================================
@@ -157,23 +115,26 @@ class AIS_loader(Dataset):
 # =============================================================================
 if __name__ == "__main__":
     dataset = AIS_loader(choice='linear_interp', split='test', version=4)
-    length = dataset.seq_length
-    # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True)
-    # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate_LI))
-    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
-    
-    # for features, labels, lengths in dataloader:
-    #     print(features.shape)
-    #     break
+    # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
+    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
     # dataset.visualise_tensor(250)
     
-    for item, label, lengths in dataloader:
-        feature = item[0]
-        print(feature.shape)
-        plt.plot(feature[:, 2], feature[:, 3])
-        plt.scatter(feature[:, 2], feature[:, 3], s=8)
-        # plt.show()
-        break
+# =============================================================================
+#     for batch_seqs, labels, lengths in dataloader:
+#         feature = batch_seqs[0]
+#         # print(feature.shape)
+#         
+#         # plot for GRUs
+#         # plt.plot(feature[:, 2], feature[:, 3])
+#         # plt.scatter(feature[:, 2], feature[:, 3], s=8)
+#         # plt.show()
+#         
+#         # plot for CNNs
+#         plt.plot(feature[2, :], feature[3, :])
+#         plt.scatter(feature[2, :], feature[3, :], s=8)
+#         plt.show()
+# =============================================================================
+        # break
         
     # print(sample_item)
 

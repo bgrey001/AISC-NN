@@ -129,17 +129,17 @@ Appendix:
     
 BACKLOG:
 ------------------------------------------------>
+* Change graphs for model performance to CNN on left not right
 * Create reference time point set for both interpolation techniques
 * Create linearly interpolated data with higher resolution (every minute), using custom PyTorch Dataset class for memory management
 * Train 1D CNN and GRU models on linearly interpolated data using similar methodology and complexity, gain best possible results
-* Implement mTANs on Mimic III dataset for testing
+* Implement mTANs on human activity (MIMIC III access impossible) dataset for testing
 * Non-linear interpolation using the reference time points generated on the AIS data
 * Train classification networks on the non-linearly interpolated data and gain best possible results
 * Implement SVM on all data pipelines for comparison
 * Begin evaluation of results
 * Introduce time measurement during prediction to see the efficiency of performance -> important for deployment
 * Research applications for real time data
-   
    
     
 DATA PIPELINES:

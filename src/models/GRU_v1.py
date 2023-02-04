@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Nov 29 13:57:37 2022
-
 @author: benedict
 
 Gated recurrent unit network implementation with PyTorch (GRU_v1)
@@ -15,8 +14,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn.utils.prune as prune
 
-from pycm import *
-import math
+from pycm import ConfusionMatrix
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
@@ -160,8 +158,6 @@ class GRU_wrapper():
         self.optim_name = optimizer
         self.criterion = nn.CrossEntropyLoss()
 
-
-    
     def class_from_output(self, output, is_tensor):
         # print(output)
         if is_tensor:
@@ -189,8 +185,6 @@ class GRU_wrapper():
         if validate:
             valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
 
-        # assert statements?
-        
         for epoch in range(epochs):
 
             aggregate_correct = 0
@@ -204,20 +198,16 @@ class GRU_wrapper():
             index = 0
             for features, labels, lengths in train_generator:
                 # with torch.no_grad():
-                # self.model.eval()
                 self.model.train()
                 features, labels = features.to(self.device), labels.to(self.device) # transfer to GPU
                 # forward propagation
                 output = self.model(features)
-                # output = output[:, -1]
                 # backpropagation
                 self.optimizer.zero_grad()
                 loss = self.criterion(output, labels)
                 loss.backward()
                 self.optimizer.step()
-                # outputs = torch.zeros(labels.size()[0]).int().to(self.device)
                 outputs = torch.argmax(output, dim=1)
-                
                 aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
             
                 if index == 0 and epoch == 0:
@@ -282,9 +272,8 @@ class GRU_wrapper():
             else:
                 self.predict()
                 
-            if epoch % 2 == 0:
-                self.confusion_matrix()
-                print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
+            self.confusion_matrix(valid=True)
+            print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -340,14 +329,18 @@ class GRU_wrapper():
     # =============================================================================
     # method to build confusion matrix
     # =============================================================================
-    def confusion_matrix(self, save_fig=False, print_confmat=False):
+    def confusion_matrix(self, valid=False, save_fig=False, print_confmat=False):
         
         test_correct = 0
         predicted, labels = [], []
         n_correct = 0
         
         class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
-        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+        if valid:
+            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+        else:
+            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+       
         with torch.no_grad():
             self.model.eval()
             for test_features, test_labels, lengths in test_generator:
@@ -375,8 +368,6 @@ class GRU_wrapper():
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
             plt.savefig(f'GRU_v{self.version_number}.png', dpi=300)
             plt.savefig(f'../../plots/GRU/v{self.version_number}/confmat_GRU_v{self.version_number}.png', dpi=300)
-
-        
         
         self.history['confusion_matrix'] = confmat
         self.history['class_precisions'] = confmat.class_stat['PPV']
@@ -384,8 +375,10 @@ class GRU_wrapper():
         self.history['class_F1_scores'] = confmat.class_stat['F1']
         self.history['class_supports'] = confmat.class_stat['P']
         
-        
-        
+
+    # =============================================================================
+    # methdo to prune (probably low magnitude) weights to improve generalisation
+    # =============================================================================
     def prune_weights(self, amount):
         parameters_to_prune = (
             # (self.model.gru, 'all_weights'),
@@ -394,13 +387,11 @@ class GRU_wrapper():
             (self.model.fc_3, 'weight'),
         )
 
-
         prune.global_unstructured(
             parameters_to_prune,
             pruning_method=prune.L1Unstructured,
             amount=amount,
         )
-        
         
         
     # =============================================================================
@@ -410,7 +401,6 @@ class GRU_wrapper():
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         
 
-    
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
@@ -418,8 +408,10 @@ class GRU_wrapper():
         self.version_number = version_number
         if init:
             torch.save(self.model.state_dict(), f'saved_models/init_param_models/GRU_v{version_number}.pt')
-        else:
-            torch.save(self.model.state_dict(), f'saved_models/GRU_v{version_number}.pt')
+        elif self.dataset == 'varying':
+            torch.save(self.model.state_dict(), f'saved_models/zero_padded/GRU_v{version_number}.pt')
+        elif self.dataset == 'linear_interp':
+            torch.save(self.model.state_dict(), f'saved_models/linear_interp/GRU_v{version_number}.pt')
             
         print(f'GRU_v{version_number} state_dict successfully saved')
         self.save_history(version_number, init)
@@ -431,8 +423,11 @@ class GRU_wrapper():
         self.version_number = version_number
         if init:
             self.model.load_state_dict(torch.load(f'saved_models/init_param_models/GRU_v{version_number}.pt'))
-        else:
-            self.model.load_state_dict(torch.load(f'saved_models/GRU_v{version_number}.pt'))
+        elif self.dataset == 'varying':
+            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/GRU_v{version_number}.pt'))
+        elif self.dataset == 'linear_interp':
+            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/GRU_v{version_number}.pt'))
+            
         print(f'GRU_v{version_number} state dictionary successfully loaded')
         self.load_history(version_number, init)
 
@@ -441,15 +436,11 @@ class GRU_wrapper():
     # =============================================================================
     def print_params(self):
         params = self.model.named_parameters()
-        # for p in params:
-        #     print(p)
-            
         for name, param in params:
             # if param.requires_grad:
             print(name)
             print(param.data.shape)
             print()
-                # print(name, param.data)s
 
     # =============================================================================
     # returns history
@@ -464,28 +455,34 @@ class GRU_wrapper():
         if init:
             with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
-        else:
-            with open(f'saved_models/history/GRU_v{version_number}_history.pkl', 'wb') as f:
+        elif self.dataset == 'varying':
+            with open(f'saved_models/history/zero_padded/GRU_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
+        elif self.dataset == 'linear_interp':
+            with open(f'saved_models/history/linear_interp/GRU_v{version_number}_history.pkl', 'wb') as f:
+                pickle.dump(self.history, f)
+                
         print(f'GRU_v{version_number} history saved')
 
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
-
     def load_history(self, version_number, init=False):
         if init:
             with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
-        else:
-            with open(f'saved_models/history/GRU_v{version_number}_history.pkl', 'rb') as f:
+        elif self.dataset == 'varying':
+            with open(f'saved_models/history/zero_padded/GRU_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
+        elif self.dataset == 'linear_interp':
+            with open(f'saved_models/history/linear_interp/GRU_v{version_number}_history.pkl', 'rb') as f:
+                self.history = pickle.load(f)
+                
         print(f'GRU_v{version_number} history loaded')
 
     # =============================================================================
     # plot given metric
     # =============================================================================
-
     def plot(self, metric):
         match metric:
             case 'training_accuracy':
@@ -588,12 +585,12 @@ class GRU_wrapper():
 # =============================================================================
 # instantiate K models and select the model with the highest validation accuracy
 # =============================================================================
-def nonrandom_init(K):
+def nonrandom_init(K, dataset):
     print(f'Beginning random initalisation with {K} different models')
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = GRU_wrapper(GRU, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
+        model = GRU_wrapper(GRU, dataset=dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=3)
         # print(models[k].history['validation_accuracy'])
@@ -612,7 +609,8 @@ def nonrandom_init(K):
 # =============================================================================
 # run random initalisation and then load the model with the highest validation accuracy for more training
 # =============================================================================
-# nonrandom_init(K=20)
+# model = GRU_wrapper(GRU, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
+# nonrandom_init(K=20, dataset='linear_interp')
 
     
 # =============================================================================
@@ -630,21 +628,27 @@ def load_highest_model(model):
 # =============================================================================
 # load the best randomly initialised network parameters for further training
 # =============================================================================
-# model = GRU_wrapper(GRU, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
+nonrand = False
+current_dataset = 'linear_interp'
+
+if nonrand:
+    nonrandom_init(K=20, dataset=current_dataset)
+    
+model = GRU_wrapper(GRU, dataset=current_dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=False)
 # load_highest_model(model)
 
 
 # =============================================================================
 # testing zone
 # =============================================================================
-model = GRU_wrapper(GRU, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=False)
-# model.load_model(7)
+# model = GRU_wrapper(GRU, dataset=current_dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=False)
+model.load_model(1)
 
-model.fit(validate=True, epochs=1)
+# model.fit(validate=True, epochs=47)
 # model.prune_weights(amount=0.2)
-model.predict()
+# model.predict()
 model.print_summary(print_cm=(True))
-# model.save_model(7)
+# model.save_model(2)
 
 
 

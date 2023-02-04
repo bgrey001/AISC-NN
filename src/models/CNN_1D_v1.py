@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov 28 19:18:57 2022
-
 @author: benedict
 
 1 dimensional convolutional neural network with residual blocks  PyTorch implementation (CNN_1D_v1)
@@ -15,13 +14,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn.utils.prune as prune
 
-from pycm import *
+from pycm import ConfusionMatrix
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from scipy.interpolate import make_interp_spline
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 import AIS_loader as data_module
 
 
@@ -174,7 +173,6 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    dataset = 'linear_interp' # being padded in the AIS_loader class
     datatype = 'linearly interpolated'
     data_ver = '4'
     shuffle = True
@@ -187,16 +185,16 @@ class CNN_1D_wrapper():
     eta = 3e-4
     alpha = 1e-4
     weight_decay = 1e-5
-    batch_size = 128
-    epochs = 5
+    epochs = 0
     optim_name = ''
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def __init__(self, CNN_1D, optimizer, combine=False):
-        
+    def __init__(self, CNN_1D, dataset, optimizer, batch_size, combine=False):
         
         # init class members
+        self.dataset = dataset
+        self.batch_size = batch_size
         self.version_number = 0
 
         self.history = {'training_accuracy': [], 
@@ -212,12 +210,8 @@ class CNN_1D_wrapper():
                         'class_F1_scores': None,
                         'class_supports': None}
         
-        
-        
-        
         self.training_losses, self.validation_losses, self.test_losses, self.training_accuracies, self.validation_accuracies, self.test_accuracies = ([] for i in range(6))
         self.class_accuracies = None
-        
         
         # init dataset class objects
         if combine:
@@ -225,8 +219,8 @@ class CNN_1D_wrapper():
         else:
             self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver)
             self.valid_data = data_module.AIS_loader(choice=self.dataset, split='valid', version=self.data_ver)
+            
         self.test_data = data_module.AIS_loader(choice=self.dataset, split='test', version=self.data_ver)
-        
         self.n_features = self.train_data.n_features
         self.n_classes = self.train_data.n_classes
         self.seq_length = self.train_data.seq_length
@@ -243,7 +237,6 @@ class CNN_1D_wrapper():
 
         self.optim_name = optimizer
         self.criterion = nn.CrossEntropyLoss()
-
 
     
     def class_from_output(self, output, is_tensor):
@@ -308,8 +301,6 @@ class CNN_1D_wrapper():
                     print(f'Initial accuracy = {first_accuracy}')
                     
                 if (index + 1) % plot_steps == 0:
-                    # metric = MulticlassAccuracy(num_classes=self.n_classes, average=None).to(self.device)
-                    # print(metric(outputs, labels))
                     if (index + 1) % train_print_steps == 0:
                         print(f'Epoch {epoch}, batch number: {index + 1}, training loss = {loss}')
                     train_loss_counter += 1
@@ -341,11 +332,8 @@ class CNN_1D_wrapper():
                         # calculate loss and valid_loss
                         v_loss = self.criterion(valid_output, valid_labels)
                         valid_outputs = torch.argmax(valid_output, dim=1)
-                        # valid_outputs = torch.zeros(valid_labels.size()[0]).int().to(self.device)
                         v_correct += ((valid_outputs == valid_labels).sum().item() / len(valid_labels)) * 100
                         if (v_index + 1) % plot_steps == 0:
-                            # metric = MulticlassAccuracy(num_classes=self.n_classes, average=None).to(self.device)
-                            # print(metric(valid_outputs, valid_labels))
                             if (v_index + 1) % val_print_steps == 0:
                                 print(f'Epoch {epoch}, validation batch number: {v_index + 1}, validation loss = {v_loss}')
                             valid_loss_counter += 1
@@ -365,9 +353,8 @@ class CNN_1D_wrapper():
             else:
                 self.predict()
                 
-            if epoch % 2 == 0:
-                self.confusion_matrix()
-                print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
+            self.confusion_matrix(valid=True)
+            print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -386,10 +373,8 @@ class CNN_1D_wrapper():
         
         # for varying padded data
         test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.CNN_collate)
-        
-        # for linearly interpolated
-        # test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle)
         test_index = 0
+        
         for test_features, test_labels, lengths in test_generator:
             self.model.eval()
             with torch.no_grad():
@@ -427,14 +412,18 @@ class CNN_1D_wrapper():
     # =============================================================================
     # method to build confusion matrix
     # =============================================================================
-    def confusion_matrix(self, save_fig=False, print_confmat=False):
+    def confusion_matrix(self, valid=False, save_fig=False, print_confmat=False):
         
         test_correct = 0
         predicted, labels = [], []
         n_correct = 0
         
         class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
-        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.CNN_collate)
+        if valid:
+            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.CNN_collate)
+        else:
+            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.CNN_collate)
+            
         with torch.no_grad():
             self.model.eval()
             for test_features, test_labels, lengths in test_generator:
@@ -502,25 +491,24 @@ class CNN_1D_wrapper():
         )
         
         
-        
-        
     # =============================================================================
     # method returns total parameters in the network
     # =============================================================================
     def total_params(self):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         
-    
+
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
-
     def save_model(self, version_number, init=False):
         self.version_number = version_number
         if init:
             torch.save(self.model.state_dict(), f'saved_models/init_param_models/CNN_1D_v{version_number}.pt')
-        else:
-            torch.save(self.model.state_dict(), f'saved_models/CNN_1D_v{version_number}.pt')
+        elif self.dataset == 'varying':
+            torch.save(self.model.state_dict(), f'saved_models/zero_padded/CNN_1D_v{version_number}.pt')
+        elif self.dataset == 'linear_interp':
+            torch.save(self.model.state_dict(), f'saved_models/linear_interp/CNN_1D_v{version_number}.pt')
             
         print(f'CNN_1D_v{version_number} state_dict successfully saved')
         self.save_history(version_number, init)
@@ -532,8 +520,11 @@ class CNN_1D_wrapper():
         self.version_number = version_number
         if init:
             self.model.load_state_dict(torch.load(f'saved_models/init_param_models/CNN_1D_v{version_number}.pt'))
-        else:
-            self.model.load_state_dict(torch.load(f'saved_models/CNN_1D_v{version_number}.pt'))
+        elif self.dataset == 'varying':
+            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/CNN_1D_v{version_number}.pt'))
+        elif self.dataset == 'linear_interp':
+            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/CNN_1D_v{version_number}.pt'))
+            
         print(f'CNN_1D_v{version_number} state dictionary successfully loaded')
         self.load_history(version_number, init)
 
@@ -542,15 +533,11 @@ class CNN_1D_wrapper():
     # =============================================================================
     def print_params(self):
         params = self.model.named_parameters()
-        # for p in params:
-        #     print(p)
-            
         for name, param in params:
             # if param.requires_grad:
             print(name)
             print(param.data.shape)
             print()
-                # print(name, param.data)
 
     # =============================================================================
     # returns history
@@ -565,28 +552,34 @@ class CNN_1D_wrapper():
         if init:
             with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
-        else:
-            with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
+        elif self.dataset == 'varying':
+            with open(f'saved_models/history/zero_padded/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
+        elif self.dataset == 'linear_interp':
+            with open(f'saved_models/history/linear_interp/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
+                pickle.dump(self.history, f)
+                
         print(f'CNN_1D_v{version_number} history saved')
 
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
-
     def load_history(self, version_number, init=False):
         if init:
             with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
-        else:
-            with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
+        elif self.dataset == 'varying':
+            with open(f'saved_models/history/zero_padded/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
+        elif self.dataset == 'linear_interp':
+            with open(f'saved_models/history/linear_interp/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
+                self.history = pickle.load(f)
+                
         print(f'CNN_1D_v{version_number} history loaded')
 
     # =============================================================================
     # plot given metric
     # =============================================================================
-
     def plot(self, metric):
         match metric:
             case 'training_accuracy':
@@ -646,18 +639,17 @@ class CNN_1D_wrapper():
                 plt.show()
             case 'test_loss':
                 y = np.array(self.history['test_loss'])
-                x = np.arange(len(y)) # number of epochs
+                x = np.arange(len(y)) # number of epochsstrongest
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
                 plt.plot(x_, y_)
                 plt.title('Test loss')
                 plt.xlabel('epochs')
-                plt.ylabel('loss')        
+                plt.ylabel('loss')
                 plt.show()
                 
                 
-
     # =============================================================================
     # plot given metric
     # =============================================================================
@@ -666,9 +658,8 @@ class CNN_1D_wrapper():
         self.confusion_matrix()
         print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
-              f'conv_l1 = {self.conv_l1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
-              f'\nData: {self.datatype}, v{self.data_ver}, \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
+              f'\nData: {self.dataset}, v{self.data_ver}, \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
         print('\nMetric table')
@@ -688,19 +679,18 @@ class CNN_1D_wrapper():
             self.confusion_matrix(print_confmat=(True))
 
 
-
 # =============================================================================
 # instantiate K models and select the model with the highest validation accuracy
 # =============================================================================
-def nonrandom_init(K):
+def nonrandom_init(K, dataset):
     print(f'Beginning random initalisation with {K} different models')
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW')
+        model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=3)
-        # print(models[k].history['validatistrongeston_accuracy'])
+        # print(models[k].history['validation_accuracy'])
         if max(model.history['validation_accuracy']) > records['highest_accuracy']:
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
@@ -709,40 +699,49 @@ def nonrandom_init(K):
         del model
         
     # save highest index 
-    with open('saved_models/history/init_histories/CNN_highest_idx.pkl', 'wb') as f:
+    with open('saved_models/history/init_histories/CNN_1D_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
-    
     
 # =============================================================================
 # run random initalisation and then load the model with the highest validation accuracy for more training
 # =============================================================================
-# nonrandom_init(K=20)
+# model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
+# nonrandom_init(K=20, dataset='linear_interp')
 
     
 # =============================================================================
 # load the parameters of the model with the highest validation accuracy
 # =============================================================================
 def load_highest_model(model):
-    with open('saved_models/history/init_histories/CNN_highest_idx.pkl', 'rb') as f:
+    with open('saved_models/history/init_histories/CNN_1D_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
     model.load_model(highest_idx, init=True)
     
     
+    
+    
 # =============================================================================
 # load the best randomly initialised network parameters for further training
 # =============================================================================
-# model = CNN_1D_wrapper(CNN_1D_v2, optimizer='AdamW', combine=True)
-# load_highest_model(model)
+nonrand = False
+current_dataset = 'linear_interp'
+
+if nonrand:
+    nonrandom_init(K=20, dataset=current_dataset)
+    
+model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
+load_highest_model(model)
+
 
 
 # =============================================================================
 # testing zone
 # =============================================================================
-model = CNN_1D_wrapper(CNN_1D, optimizer='AdamW', combine=False)
+model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
 # model.load_model(4)
-model.fit(validate=True, epochs=10)
+# model.fit(validate=True, epochs=25)
 # model.prune_weights(amount=0.51)
 # model.predict()
 # model.print_params()

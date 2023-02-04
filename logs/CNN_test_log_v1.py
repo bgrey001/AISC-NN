@@ -1,7 +1,7 @@
 """
 
 =============================================================================================================================
-----------------------------------------> CNN_1D TEST LOG FOR VARYING PADDED DATA <------------------------------------------
+----------------------------------------> CNN_1D TEST LOG FOR ZERO-PADDED DATA <------------------------------------------
 =============================================================================================================================
 
 TEST 1:
@@ -207,7 +207,7 @@ TPR(Sensitivity, recall, hit rate, or true positive rate)         0.97078       
 
 
 
-TEST 2:
+TEST 3:
 ---------------------------------------->
 Model: CNN_1D_v4 -> Hyperparamters: 
 Learnig rate = 0.0003 
@@ -217,7 +217,7 @@ conv_l1 = 64
 kernel_size = 3 
 pool_size = 2 
 Batch size = 128 
-Epochs = 5 
+Epochs = 35 
 Model structure: 
 CNN_1D_v2(
   (conv_1): Conv1d(5, 64, kernel_size=(3,), stride=(1,))
@@ -315,7 +315,7 @@ TOP(Test outcome positive)                                        12809         
 TP(True positive/hit)                                             12428         2036          235           1912          4273          205           
 TPR(Sensitivity, recall, hit rate, or true positive rate)         0.97094       0.85871       0.80205       0.8386        0.92489       0.85774    
 
-NOTES: Added pruning, marginal increase in test accuracy
+NOTES: Added pruning, small increase in test accuracy
 
 
 
