@@ -185,7 +185,6 @@ class CNN_1D_wrapper():
     eta = 3e-4
     alpha = 1e-4
     weight_decay = 1e-5
-    epochs = 0
     optim_name = ''
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -212,6 +211,9 @@ class CNN_1D_wrapper():
         
         self.training_losses, self.validation_losses, self.test_losses, self.training_accuracies, self.validation_accuracies, self.test_accuracies = ([] for i in range(6))
         self.class_accuracies = None
+        self.epochs = len(self.history['training_accuracy'])
+
+        
         
         # init dataset class objects
         if combine:
@@ -252,11 +254,8 @@ class CNN_1D_wrapper():
     # Train model
     # =============================================================================
 
-    def fit(self, validate, epochs=None):
-        if epochs == None:
-            epochs = self.epochs
-        else:
-            self.epochs = epochs
+    def fit(self, validate, epochs):
+
         
         train_print_steps = 200
         val_print_steps = plot_steps = 20
@@ -353,7 +352,7 @@ class CNN_1D_wrapper():
             else:
                 self.predict()
                 
-            self.confusion_matrix(valid=True)
+            self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
 
         # history
@@ -575,6 +574,7 @@ class CNN_1D_wrapper():
             with open(f'saved_models/history/linear_interp/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
                 
+        self.epochs = len(self.history['training_accuracy'])
         print(f'CNN_1D_v{version_number} history loaded')
 
     # =============================================================================
@@ -659,7 +659,7 @@ class CNN_1D_wrapper():
         print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
-              f'\nData: {self.dataset}, v{self.data_ver}, \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
+              f'\nData: {self.dataset}, v{self.data_ver} \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
         print('\nMetric table')
@@ -731,22 +731,24 @@ current_dataset = 'linear_interp'
 if nonrand:
     nonrandom_init(K=20, dataset=current_dataset)
     
-model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
-load_highest_model(model)
+model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=True)
+# load_highest_model(model)
 
 
 
 # =============================================================================
 # testing zone
 # =============================================================================
-model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
-# model.load_model(4)
-# model.fit(validate=True, epochs=25)
-# model.prune_weights(amount=0.51)
+# model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
+model.load_model(2)
+# model.fit(validate=False, epochs=25)
+# model.prune_weights(amount=0.21)
 # model.predict()
 # model.print_params()
-# model.print_summary(print_cm=(True))
-# model.save_model(5)
+model.print_summary(print_cm=(True))
+# model.save_model(2)
+
+
 
 
 # model.plot('training_accuracy')

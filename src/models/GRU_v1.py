@@ -272,7 +272,7 @@ class GRU_wrapper():
             else:
                 self.predict()
                 
-            self.confusion_matrix(valid=True)
+            self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
 
         # history
@@ -562,7 +562,7 @@ class GRU_wrapper():
         print(f'\nModel: GRU_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
-              f'\nData: {self.dataset}, v{self.data_ver}, \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
+              f'\nData: {self.dataset}, v{self.data_ver} \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
               )
         
         print('\nMetric table')
@@ -634,28 +634,26 @@ current_dataset = 'linear_interp'
 if nonrand:
     nonrandom_init(K=20, dataset=current_dataset)
     
-model = GRU_wrapper(GRU, dataset=current_dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=False)
+model = GRU_wrapper(GRU, dataset=current_dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=True)
 # load_highest_model(model)
 
 
 # =============================================================================
 # testing zone
 # =============================================================================
-# model = GRU_wrapper(GRU, dataset=current_dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=128, combine=False)
-model.load_model(1)
-
-# model.fit(validate=True, epochs=47)
+model.load_model(3)
+model.fit(validate=False, epochs=25)
 # model.prune_weights(amount=0.2)
-# model.predict()
-model.print_summary(print_cm=(True))
-# model.save_model(2)
+model.predict()
+model.print_summary(print_cm=True)
+model.save_model(4)
 
 
 
-# model.plot('training_accuracy')
-# model.plot('validation_accuracy')
-# model.plot('training_loss')
-# model.plot('validation_loss')
+model.plot('training_accuracy')
+model.plot('validation_accuracy')
+model.plot('training_loss')
+model.plot('validation_loss')
 
 
 
