@@ -97,7 +97,8 @@ class pre_processing_module:
             if not interpolated:
                 # time deltas 
                 df['delta_t'] = (df['timestamp']-df['timestamp'].shift()).fillna(pd.Timedelta(seconds=0)) # compute change in time for each timestep and create feature delta_t
-                df['delta_t_cum'] = df['delta_t'].cumsum() # get cummalative sum of the delta column
+                df['delta_t_cum'] = df['delta_t'].dt.total_seconds().cumsum() # get cummalative sum of the delta column
+                df['normalised_delta_t_cum'] = df['delta_t_cum'] / total_num_seconds 
                 df['normalised_delta_t'] = df['delta_t'].dt.total_seconds() / total_num_seconds # normalising date time
             
             # course and speed deltas

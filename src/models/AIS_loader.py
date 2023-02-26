@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov 28 11:18:55 2022
-@author: benedict
+@author: Benedict Grey
 
 Script implementing customised PyTorch Dataset and DataLoader classes
 
@@ -13,6 +13,9 @@ Data fields for:
         
     Linearly interpolated time series:
         speed | course | lat | lon | desired
+        
+    Varying for non-linear attention interpolation:
+        speed | lat | lon | delta_time_cum | delta_course | target
 
 """
 
@@ -34,6 +37,7 @@ class AIS_loader(Dataset):
 #     input shape: batch_size, n_features, seq_length
 # =============================================================================
     def __init__(self, choice, split, version, split_2=None):
+        self.choice = choice
         random.seed(15) # set random seed to reproduce random results
         with open(f'../../data/pkl/{choice}/{split}_v{version}.pkl', 'rb') as f:
             self.seq_list = pickle.load(f)
@@ -93,7 +97,13 @@ class AIS_loader(Dataset):
             j, k = data[i][0].size(0), data[i][0].size(1)
             sequences[i] = torch.cat([data[i][0], torch.zeros((int(self.seq_length) - j, k))])
         
-        return sequences.float(), labels.long(), lengths.long()
+        if self.choice == 'non_linear':
+            sequences = sequences[:, :, [0,1,2,4]]
+            time_steps = sequences[:, :, 3]
+            return sequences.float(), time_steps.float(), labels.long(), lengths.long()
+            
+        else:
+            return sequences.float(), labels.long(), lengths.long()
     
 
         
@@ -113,27 +123,38 @@ class AIS_loader(Dataset):
 # =============================================================================
 # testing zone
 # =============================================================================
-if __name__ == "__main__":
-    dataset = AIS_loader(choice='linear_interp', split='test', version=4)
-    # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
-    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
+# if __name__ == "__main__":
+#     dataset = AIS_loader(choice='non_linear', split='test', version=1)
+#     dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
+    # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
     # dataset.visualise_tensor(250)
     
-# =============================================================================
-#     for batch_seqs, labels, lengths in dataloader:
-#         feature = batch_seqs[0]
-#         # print(feature.shape)
-#         
-#         # plot for GRUs
-#         # plt.plot(feature[:, 2], feature[:, 3])
-#         # plt.scatter(feature[:, 2], feature[:, 3], s=8)
-#         # plt.show()
-#         
-#         # plot for CNNs
-#         plt.plot(feature[2, :], feature[3, :])
-#         plt.scatter(feature[2, :], feature[3, :], s=8)
-#         plt.show()
-# =============================================================================
+    # for batch_seqs, batch_time_steps, labels, lengths in dataloader:
+    #     feature = batch_seqs[0]
+    #     print(batch_time_steps.shape)
+    #     time_steps = batch_time_steps[0]
+    #     # print(feature)
+    #     print(time_steps)
+    #     # print(batch_seqs.shape)
+    #     break
+    
+    # for batch_seqs, labels, lengths in dataloader:
+    #     feature = batch_seqs[0]
+    #     # print(batch_time_steps.shape)
+    #     # time_steps = batch_time_steps[0]
+    #     print(batch_seqs.shape)
+    #     break
+        
+        
+        # plot for GRUs
+        # plt.plot(feature[:, 2], feature[:, 3])
+        # plt.scatter(feature[:, 2], feature[:, 3], s=8)
+        # plt.show()
+        
+        # plot for CNNs
+        # plt.plot(feature[2, :], feature[3, :])
+        # plt.scatter(feature[2, :], feature[3, :], s=8)
+        # plt.show()
         # break
         
     # print(sample_item)

@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Nov 29 13:57:37 2022
+Created on Sun Feb 26 15:57:22 2023
 @author: Benedict Grey
 
-Gated recurrent unit network implementation with PyTorch (GRU_v1)
+
+DISCLAIMER:
+Script for the implementation of Shukla and Marlin's mTAN encoder classification network
+All credit goes to the original authors, this is merely an modification of the original code
+https://github.com/reml-lab/mTAN
 
 """
 
+# =============================================================================
+# dependencies
+# =============================================================================
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -23,105 +30,173 @@ from scipy.interpolate import make_interp_spline
 from torch.utils.data import DataLoader
 import AIS_loader as data_module
 
+
+
+import argparse
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+
+import time
+import numpy as np
+import pandas as pd
+import math
+from random import SystemRandom
+
+
 sns.set_style("darkgrid") 
 
 # =============================================================================
-# model class inherits from torch Module class
+# mTAN module
 # =============================================================================
-class GRU(nn.Module):
-
-    # =============================================================================
-    # class attributes
-    # =============================================================================
+class multiTimeAttention(nn.Module):
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    
+    def __init__(self, input_dim, nhidden=16, 
+                 embed_time=16, num_heads=1):
+        super(multiTimeAttention, self).__init__()
+        assert embed_time % num_heads == 0
+        self.embed_time = embed_time
+        self.embed_time_k = embed_time // num_heads
+        self.h = num_heads
+        self.dim = input_dim
+        self.nhidden = nhidden
+        self.linears = nn.ModuleList([nn.Linear(embed_time, embed_time), 
+                                      nn.Linear(embed_time, embed_time),
+                                      nn.Linear(input_dim*num_heads, nhidden)])
+        
+    def attention(self, query, key, value, mask=None, dropout=None):
+        "Compute 'Scaled Dot Product Attention'"
+        torch.cuda.empty_cache()
+        dim = value.size(-1)
+        d_k = query.size(-1)
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+        scores = scores.unsqueeze(-1).repeat_interleave(dim, dim=-1)
+        if mask is not None:
+            scores = scores.masked_fill(mask.unsqueeze(-3) == 0, -1e9)
+        p_attn = F.softmax(scores, dim = -2).to(self.device)
+        if dropout is not None:
+            p_attn = dropout(p_attn)
+        return torch.sum(p_attn*value.unsqueeze(-3).to(self.device), -2), p_attn.to(self.device)
+    
+    
+    def forward(self, query, key, value, mask=None, dropout=None):
+        "Compute 'Scaled Dot Product Attention'"
+        batch, seq_len, dim = value.size()
+        if mask is not None:
+            # Same mask applied to all h heads.
+            mask = mask.unsqueeze(1)
+        value = value.unsqueeze(1)
+        query, key = [l(x).view(x.size(0), -1, self.h, self.embed_time_k).transpose(1, 2)
+                      for l, x in zip(self.linears, (query, key))]
+        x, _ = self.attention(query, key, value, mask, dropout)
+        x = x.transpose(1, 2).contiguous().view(batch, -1, self.h * dim)
+        return self.linears[-1](x)
 
+
+# =============================================================================
+# full mTAN classification network
+# =============================================================================
+class mTAN_enc(nn.Module):
+ 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")   
+ 
     # =============================================================================
     # constructor
     # =============================================================================
-    def __init__(self, n_features, hidden_dim, n_layers, n_classes, seq_length, batch_size, bidirectional):
-        super(GRU, self).__init__()
+    def __init__(self, input_dim, n_gru_layers, nhidden=16, embed_time=16, num_heads=1, learn_emb=True, freq=10., bidirectional=True, n_classes=6):
+        super(mTAN_enc, self).__init__()
         
         bi_dim = 1
         if bidirectional:
             bi_dim = 2
-        
         self.bi_dim = bi_dim
+        self.n_classes = n_classes
         
-        self.dropout_prob = 0
-        self.n_layers = n_layers
-        self.hidden_dim = hidden_dim  
-        self.batch_size = batch_size
+        self.freq = freq
+        self.embed_time = embed_time
+        self.learn_emb = learn_emb
+        self.dim = input_dim
+        self.nhidden = nhidden
+        self.att = multiTimeAttention(input_dim, nhidden, embed_time, num_heads)
+        self.GRU = nn.GRU(nhidden, nhidden, bidirectional=bidirectional, num_layers=n_gru_layers, batch_first=True)
         
-        self.gru = nn.GRU(input_size=n_features, 
-                          hidden_size=hidden_dim, 
-                          num_layers=n_layers, 
-                          batch_first=True, 
-                          dropout=self.dropout_prob, 
-                          bidirectional=bidirectional)
-        
-        # flatten and prediction layers
-        self.relu = nn.ReLU()
-        self.fc_1 = nn.Linear(hidden_dim * bi_dim, 128)
-        self.fc_2 = nn.Linear(128, 64)
-        self.fc_3 = nn.Linear(64, n_classes)
+        if learn_emb:
+            self.periodic = nn.Linear(1, embed_time-1)
+            self.linear = nn.Linear(1, 1)
+            
+        self.classifier = nn.Sequential(
+            nn.Linear(nhidden*self.bi_dim, 128), 
+            nn.Linear(128, 64),
+            nn.Linear(64, self.n_classes))
+            
 
     # =============================================================================
-    # forward propagation method
+    # method that learns the time embeddings as weights
     # =============================================================================
-    def forward(self, input_x):
-        
-        h0 = torch.zeros(self.n_layers * self.bi_dim, self.batch_size, self.hidden_dim).to(self.device) # init hidden state, as it can't exist before the first forward prop
-        gru_out, hidden = self.gru(input_x, h0)
-        
-        """
-        We are taking the first and final predictions of each sequence and concatenating them. 
-        This represents the final outputs of the GRU for forward and reverse directions:
-            gru_out[:, -1, :self.hidden_dim] is the last hidden state of the forward pass
-            gru_out[:, 0, self.hidden_dim:]  is the last hidden state of the backward pass
-            fc_in = torch.cat((gru_out[:, -1, :self.hidden_dim], gru_out[:, 0, self.hidden_dim:]), dim=1)
-        
-        The following method produces the same results (have opted for the first method as involves less data transformations):
-            hidden = hidden.view(self.n_layers, self.bi_dim, self.batch_size, self.hidden_dim)
-            hidden = hidden[-1]
-            hidden_forward, hidden_backward = hidden[0], hidden[1]
-            fc_in = torch.cat((hidden_forward, hidden_backward), dim = 1)
-        """
-
-        fc_in = torch.cat((gru_out[:, -1, :self.hidden_dim], gru_out[:, 0, self.hidden_dim:]), dim=1)
-
-        # classification layers
-        fc_in = self.relu(self.fc_1(fc_in))
-        fc_in = self.relu(self.fc_2(fc_in))
-        output = self.fc_3(fc_in)
-        return output
-
- 
+    def learn_time_embedding(self, tt):
+        tt = tt.to(self.device)
+        tt = tt.unsqueeze(-1)
+        out2 = torch.sin(self.periodic(tt))
+        out1 = self.linear(tt)
+        return torch.cat([out1, out2], -1)
+       
+    # =============================================================================
+    # method that generates positional encodings to provide sequential semantics for the model
+    # =============================================================================
+    def time_embedding(self, pos, d_model):
+        pe = torch.zeros(pos.shape[0], pos.shape[1], d_model)
+        position = 48.*pos.unsqueeze(2)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * -(np.log(self.freq) / d_model))
+        pe[:, :, 0::2] = torch.sin(position * div_term)
+        pe[:, :, 1::2] = torch.cos(position * div_term)
+        return pe
+    
+       
+    def forward(self, x, time_steps):
+        time_steps = time_steps.to(self.device)
+        mask = x[:, :, self.dim:]
+        mask = torch.cat((mask, mask), 2)
+        if self.learn_emb:
+            key = self.learn_time_embedding(time_steps).to(self.device) 
+        else:
+            key = self.time_embedding(time_steps, self.embed_time).to(self.device)
+        att_out = self.att(query=key, key=key, value=x, mask=None)
+        gru_out, hidden = self.GRU(att_out)
+        class_in = torch.cat((gru_out[:, -1, :self.nhidden], gru_out[:, 0, self.nhidden:]), dim=1)        
+        out = self.classifier(class_in)
+        return out
+    
     
 # =============================================================================
-# wrapper class for an instance of the GRU_RNN model
+# wrapper class for an instance of the mTAN_RNN model
 # =============================================================================
-class GRU_wrapper():
+class mTAN_wrapper():
 
     # =============================================================================
     # Class attributes
     # =============================================================================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     # =============================================================================
     # Data attributes
     # =============================================================================
-    data_ver = '3'
+    data_ver = '1'
     shuffle = True
     # =============================================================================
     # Hyperparameters
     # =============================================================================
     eta = 3e-4
     alpha = 1e-4
-    # weight_decay = 1e-5
     optim_name = ''
     # =============================================================================
     # constructor method
     # =============================================================================
-    def __init__(self, GRU, dataset, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
+    def __init__(self, mTAN, dataset, n_gru_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
         
         # init class members
         self.dataset = dataset
@@ -153,17 +228,19 @@ class GRU_wrapper():
             self.valid_data = data_module.AIS_loader(choice=self.dataset, split='valid', version=self.data_ver)
         self.test_data = data_module.AIS_loader(choice=self.dataset, split='test', version=self.data_ver)
         
-        self.n_features = self.train_data.n_features
+        self.n_features = 4
         self.n_classes = self.train_data.n_classes
         self.seq_length = self.train_data.seq_length
 
-        self.model = GRU(n_features=self.n_features, 
-                         hidden_dim=hidden_dim, 
-                         n_layers=n_units, 
+        self.model = mTAN_enc(input_dim=self.n_features, 
+                         nhidden=hidden_dim, 
+                         n_gru_layers=n_gru_units, 
                          n_classes=self.n_classes, 
-                         seq_length=self.seq_length,
-                         batch_size=batch_size,
-                         bidirectional=bidirectional).to(self.device)
+                         bidirectional=bidirectional,
+                         embed_time=16, 
+                         num_heads=1, 
+                         learn_emb=True, 
+                         freq=10.).to(self.device)
 
         match optimizer:
             case 'AdamW':
@@ -214,19 +291,20 @@ class GRU_wrapper():
             # training loop
             # =============================================================================
             index = 0
-            for features, labels, lengths in train_generator:
-                # with torch.no_grad():
+                
+            for seqs, time_steps, labels, lengths in train_generator:
+                
+                seqs, time_steps, labels = seqs.to(self.device), time_steps.to(self.device), labels.to(self.device)
                 self.model.train()
-                features, labels = features.to(self.device), labels.to(self.device) # transfer to GPU
+                
                 # forward propagation
-                output = self.model(features)
-
-                # backpropagation
-                loss = self.criterion(output, labels)
+                out = self.model(seqs, time_steps)
+                loss = self.criterion(out, labels)
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                outputs = torch.argmax(output, dim=1)
+            
+                outputs = torch.argmax(out, dim=1)
                 aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
             
                 if index == 0 and epoch == 0:
@@ -258,21 +336,19 @@ class GRU_wrapper():
             # =============================================================================
             if validate:
                 v_index = 0
-                for valid_features, valid_labels, lengths in valid_generator:
+                for valid_seqs, valid_time_steps, valid_labels, lengths in valid_generator:
+                    
                     self.model.eval()
-                    valid_features, valid_labels = valid_features.to(self.device), valid_labels.to(self.device)
+                    valid_seqs, valid_labels = valid_seqs.to(self.device), valid_labels.to(self.device)
                     with torch.no_grad():
                         # forward propagataion
-                        valid_output = self.model(valid_features)
+                        valid_output = self.model(valid_seqs, valid_time_steps)
                         # calculate loss and valid_loss
                         v_loss = self.criterion(valid_output, valid_labels)
                         valid_outputs = torch.argmax(valid_output, dim=1)
-                        # valid_outputs = torch.zeros(valid_labels.size()[0]).int().to(self.device)
                         v_correct += ((valid_outputs == valid_labels).sum().item() / len(valid_labels)) * 100
 
                         if (v_index + 1) % plot_steps == 0:
-                            # metric = MulticlassAccuracy(num_classes=self.n_classes, average=None).to(self.device)
-                            # print(metric(valid_outputs, valid_labels))
                             if (v_index + 1) % val_print_steps == 0:
                                 print(f'Epoch {epoch}, validation batch number: {v_index + 1}, validation loss = {v_loss}')
                             valid_loss_counter += 1
@@ -310,11 +386,12 @@ class GRU_wrapper():
         
         test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
         test_index = 0
-        for test_features, test_labels, lengths in test_generator:
+        for test_seqs, test_time_steps, test_labels, lengths in test_generator:
+
             self.model.eval()
             with torch.no_grad():
-                test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
-                test_output = self.model(test_features)
+                test_seqs, test_time_steps, test_labels = test_seqs.to(self.device), test_time_steps.to(self.device), test_labels.to(self.device)
+                test_output = self.model(test_seqs, test_time_steps)
                 
                 # calculate loss and valid_loss
                 t_loss = self.criterion(test_output, test_labels)
@@ -356,9 +433,9 @@ class GRU_wrapper():
         
         class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
         if valid:
-            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.mTAN_collate, drop_last=True)
         else:
-            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.mTAN_collate, drop_last=True)
        
         with torch.no_grad():
             self.model.eval()
@@ -385,8 +462,8 @@ class GRU_wrapper():
         
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
-            plt.savefig(f'GRU_v{self.version_number}.png', dpi=300)
-            plt.savefig(f'../../plots/GRU/v{self.version_number}/confmat_GRU_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'mTAN_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/mTAN/v{self.version_number}/confmat_mTAN_v{self.version_number}.png', dpi=300)
         
         self.history['confusion_matrix'] = confmat
         self.history['class_precisions'] = confmat.class_stat['PPV']
@@ -400,7 +477,6 @@ class GRU_wrapper():
     # =============================================================================
     def prune_weights(self, amount):
         parameters_to_prune = (
-            # (self.model.gru, 'all_weights'),
             (self.model.fc_1, 'weight'),
             (self.model.fc_2, 'weight'),
             (self.model.fc_3, 'weight'),
@@ -426,13 +502,13 @@ class GRU_wrapper():
     def save_model(self, version_number, init=False):
         self.version_number = version_number
         if init:
-            torch.save(self.model.state_dict(), f'saved_models/init_param_models/GRU_v{version_number}.pt')
+            torch.save(self.model.state_dict(), f'saved_models/init_param_models/mTAN_v{version_number}.pt')
         elif self.dataset == 'varying':
-            torch.save(self.model.state_dict(), f'saved_models/zero_padded/GRU_v{version_number}.pt')
+            torch.save(self.model.state_dict(), f'saved_models/zero_padded/mTAN_v{version_number}.pt')
         elif self.dataset == 'linear_interp':
-            torch.save(self.model.state_dict(), f'saved_models/linear_interp/GRU_v{version_number}.pt')
+            torch.save(self.model.state_dict(), f'saved_models/linear_interp/mTAN_v{version_number}.pt')
             
-        print(f'GRU_v{version_number} state_dict successfully saved')
+        print(f'mTAN_v{version_number} state_dict successfully saved')
         self.save_history(version_number, init)
 
     # =============================================================================
@@ -441,13 +517,13 @@ class GRU_wrapper():
     def load_model(self, version_number, init=False):
         self.version_number = version_number
         if init:
-            self.model.load_state_dict(torch.load(f'saved_models/init_param_models/GRU_v{version_number}.pt'))
+            self.model.load_state_dict(torch.load(f'saved_models/init_param_models/mTAN_v{version_number}.pt'))
         elif self.dataset == 'varying':
-            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/GRU_v{version_number}.pt'))
+            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/mTAN_v{version_number}.pt'))
         elif self.dataset == 'linear_interp':
-            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/GRU_v{version_number}.pt'))
+            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/mTAN_v{version_number}.pt'))
             
-        print(f'GRU_v{version_number} state dictionary successfully loaded')
+        print(f'mTAN_v{version_number} state dictionary successfully loaded')
         self.load_history(version_number, init)
 
     # =============================================================================
@@ -472,32 +548,32 @@ class GRU_wrapper():
     # =============================================================================
     def save_history(self, version_number, init=False):
         if init:
-            with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'wb') as f:
+            with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
         elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/GRU_v{version_number}_history.pkl', 'wb') as f:
+            with open(f'saved_models/history/zero_padded/mTAN_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
         elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/GRU_v{version_number}_history.pkl', 'wb') as f:
+            with open(f'saved_models/history/linear_interp/mTAN_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
                 
-        print(f'GRU_v{version_number} history saved')
+        print(f'mTAN_v{version_number} history saved')
 
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
     def load_history(self, version_number, init=False):
         if init:
-            with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'rb') as f:
+            with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
         elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/GRU_v{version_number}_history.pkl', 'rb') as f:
+            with open(f'saved_models/history/zero_padded/mTAN_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
         elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/GRU_v{version_number}_history.pkl', 'rb') as f:
+            with open(f'saved_models/history/linear_interp/mTAN_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
         self.epochs = len(self.history['training_accuracy'])
-        print(f'GRU_v{version_number} history loaded')
+        print(f'mTAN_v{version_number} history loaded')
 
     # =============================================================================
     # plot given metric
@@ -628,7 +704,7 @@ class GRU_wrapper():
 
     def print_summary(self, print_cm=False):
         self.confusion_matrix()
-        print(f'\nModel: GRU_v{self.version_number} -> Hyperparamters: \n'
+        print(f'\nModel: mTAN_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
               f'\nData: {self.dataset}, v{self.data_ver} \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
@@ -659,7 +735,14 @@ def nonrandom_init(K, dataset):
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = GRU_wrapper(GRU, dataset=dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
+        model = mTAN_wrapper(mTAN_enc, 
+                             dataset=dataset, 
+                             n_units=2, 
+                             hidden_dim=64, 
+                             optimizer='AdamW', 
+                             bidirectional=True, 
+                             batch_size=64, 
+                             combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=2)
         # print(models[k].history['validation_accuracy'])
@@ -671,58 +754,54 @@ def nonrandom_init(K, dataset):
         del model
         
     # save highest index 
-    with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'wb') as f:
+    with open('saved_models/history/init_histories/mTAN_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
     
-# =============================================================================
-# run random initalisation and then load the model with the highest validation accuracy for more training
-# =============================================================================
-# model = GRU_wrapper(GRU, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
-# nonrandom_init(K=20, dataset='linear_interp')
 
     
 # =============================================================================
 # load the parameters of the model with the highest validation accuracy
 # =============================================================================
 def load_highest_model(model):
-    with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'rb') as f:
+    with open('saved_models/history/init_histories/mTAN_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
     model.load_model(highest_idx, init=True)
     
     
     
-if __name__ == "__main__":    
+if __name__ == "__main__":        
     # =============================================================================
     # load the best randomly initialised network parameters for further training
     # =============================================================================
     nonrand = False
-    # current_dataset = 'linear_interp'
-    current_dataset = 'varying'
+    current_dataset = 'non_linear'
     
     if nonrand:
         nonrandom_init(K=10, dataset=current_dataset)
         
-    model = GRU_wrapper(GRU, 
+    model = mTAN_wrapper(mTAN_enc, 
                         dataset=current_dataset, 
-                        n_units=2, 
+                        n_gru_units=2, 
                         hidden_dim=64, 
                         optimizer='AdamW', 
                         bidirectional=True, 
-                        batch_size=64, 
-                        combine=True)
+                        batch_size=40, 
+                        combine=False)
+    
+    
     # load_highest_model(model)
     
     
     # =============================================================================
     # testing zone
     # =============================================================================
-    model.load_model(11)
-    model.fit(validate=False, epochs=25)
+    # model.load_model(11)
+    model.fit(validate=True, epochs=25)
     # model.prune_weights(amount=0.2)
-    model.predict()
-    model.print_summary(print_cm=True)
+    # model.predict()
+    # model.print_summary(print_cm=True)
     # model.confusion_matrix()
     # model.save_model(11)
     

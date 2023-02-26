@@ -1,0 +1,30 @@
+Notes on my implementation of the mTAN network for AIS data
+
+
+So far:
+
+- Read the paper
+- Researched attention, encoders and decoders further
+- Outlined the difference between learning the time embeddings and using positional encodings (an alternative option)
+- Broken down data structures for Human Activity set (couldn't access MIMIC III)
+- Processed AIS data to have similar structure to serve as input to mTAN
+- Taken the relevant modules from mTAN code base, i.e. the multi time attention and encoder modules
+- Customised the GRU and classifier fc layers to improve performance for the AIS data
+- Running experiments now
+
+Issues:
+- VERY slow due to sequence size being so much longer and the attention mechanism requiring slow matrix multiplication using 2931 x 5 vectors (compared to 50x12)
+- Can't batch more than 20 due to limitation of VRAM for GPU
+- Vanishing gradient
+	Switched optimizer to AdamW to bring in weight decay and reduced learning rate from 0.01 to 0.0003
+
+Results:
+
+Experiment 1:
+Time per epoch = 50 minutes
+Epoch 1 - accuracy 72%
+Epoch 2 - accuract 80%
+
+Promising results, just slow!
+
+

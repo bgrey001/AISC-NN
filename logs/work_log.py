@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Oct 15 17:03:16 2022
-
 @author: BenedictGrey
 
 WORK LOG
@@ -64,7 +63,8 @@ Suspiciously accurate results for the 1D_CNN (98%), investigating the cause - no
 Sat Dec 3 17:19:54 2022
 ------------------------------------------------>
 Error found in the data processing, specifically combine_datasets.py, led to jumbled sequences causing the false positives
-Problem fixed and implemented in pre_processing_module_v2.py and combine_datasets_v2.py, results are more believable
+Problem fixed and implemented in pre_processing_module_v2.py and combine_datasets_v2.py, results are more trustworthy
+Verified the continuity and integrity of data by visualising the lat and lon in the Dataloader class (coherent trajectories are present)
 
 
 Mon Dec 5 18:09:14 2022
@@ -117,29 +117,72 @@ GRU and CNN equations added
 Completed references
 Introduced abstract
 Appendix:
-	Gantt chart for project timeline
-	MVP completed
-	Core technologies added
+	- Gantt chart for project timeline
+	- MVP completed
+	- Core technologies added
 	
 
+Mon Jan 16 17:02:14 2023
+------------------------------------------------>
+Linear interpolation completed for frequency of 5 minutes
+Models trained on the data (CNN and GRU)
+Memory limitations on 1 minute frequency
+
+Tue Jan 24 11:41:37 2023
+------------------------------------------------>
+More memory obtained (from 32GB to 80GB)
+1 minute frequency linearly interpolated data processed successfully
     
     
-    
-    
+Wed Feb 1 19:10:58 2023
+------------------------------------------------>
+Work commenced on mTAN conversion for AIS data
+Hit roadblocks with CUDA errors
+Debugging the human activity data prepreprocessing
+Accessed data structure for classification encoder mTAN
+
+
+Fri Feb 10 22:32:14 2023
+------------------------------------------------>
+Organised paper for submission to KES and MAKE 2023 conferences (a lot of LaTeX work...)
+
+Fri Feb 17 18:05:19 2023
+------------------------------------------------>
+Encountered error in GRU forward pass where softmaxing using cross entropy loss (incorrect as CEL should take logits not probs from softmax)
+Removed softmaxing and tried two different techniques for accessing final hidden states of GRU
+Accuracy is the same at 95% for the GRU, updated tables and structures for results
+
+
+Sun Feb 26 15:53:04 2023
+------------------------------------------------>
+Tweeks to the classification and GRU layers of the mTAN network
+Running experiments on mTAN network (very slow)
+Researched techniques for SVM multiclass classification using multivariate time series data
+
+
+
     
 BACKLOG:
 ------------------------------------------------>
-* Change graphs for model performance to CNN on left not right
-* Create reference time point set for both interpolation techniques
-* Create linearly interpolated data with higher resolution (every minute), using custom PyTorch Dataset class for memory management
-* Train 1D CNN and GRU models on linearly interpolated data using similar methodology and complexity, gain best possible results
-* Implement mTANs on human activity (MIMIC III access impossible) dataset for testing
-* Non-linear interpolation using the reference time points generated on the AIS data
-* Train classification networks on the non-linearly interpolated data and gain best possible results
-* Implement SVM on all data pipelines for comparison
+In progress:
+* Train 1D CNN and GRU models on linearly interpolated data using similar methodology and complexity, gain best possible results - done for lower resolution
+* Non-linear interpolation using the reference time points generated on the AIS data then classify - in progress
+* Implement SVM on all data pipelines for comparison - research in progress
+
+
+Not started:
 * Begin evaluation of results
 * Introduce time measurement during prediction to see the efficiency of performance -> important for deployment
 * Research applications for real time data
+
+Finished:
+* Change graphs for model performance to CNN on left not right - done
+* Create reference time point set for both interpolation techniques - done (not needed in the end)
+* Create linearly interpolated data with higher resolution (every minute), using custom PyTorch Dataset class for memory management - done
+* Implement mTANs on human activity (MIMIC III access impossible) dataset for testing - done
+
+
+
    
     
 DATA PIPELINES:
@@ -165,8 +208,9 @@ Linear interpolation:
 
 mTAN non-linear interpolation network:
 
-	1) Create reference time points
-	2) ?
+	1) Create time point vector (cumulative sum of time deltas)
+	2) Feed into mTAN network and attack classification network, no need to decode when the embeddings can be fed straight into the classification network
+
 	    
 """
 

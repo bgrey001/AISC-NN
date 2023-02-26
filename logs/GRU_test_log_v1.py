@@ -539,6 +539,93 @@ TPR(Sensitivity, recall, hit rate, or true positive rate)         0.97687       
 NOTES: Strongest results yet, improved upon v3 using nonrandom initialisation and weight pruning.
 
 
+TEST 6:
+---------------------------------------->
+Model: GRU_v10 -> Hyperparamters: 
+Learnig rate = 0.0003 
+Optimiser = AdamW 
+Loss = CrossEntropyLoss 
+Batch size = 64 
+Epochs = 50 
+Model structure: 
+GRU(
+  (gru): GRU(5, 64, num_layers=2, batch_first=True, bidirectional=True)
+  (relu): ReLU()
+  (fc_1): Linear(in_features=128, out_features=128, bias=True)
+  (fc_2): Linear(in_features=128, out_features=64, bias=True)
+  (fc_3): Linear(in_features=64, out_features=6, bias=True)
+) 
+Total parameters = 126918
+Data: varying, v3 
+Sequence length = 2931 
+Batch size = 64 
+Shuffled = True
+
+Metric table
+=====================================================================================================================
+|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |
+=====================================================================================================================
+|        96.029%      |      0.098      |        94.175%        |       0.159       |      94.272%    |     0.135   |
+=====================================================================================================================
+
+Class F1-score table
+=====================================================================================================================
+|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |
+=====================================================================================================================
+|         97.568%        |      85.623%     |      85.714%      |     88.988%      |     93.005%    |    93.157%    |
+=====================================================================================================================
+
+
+Predict     0           1           2           3           4           5           
+Actual
+0           12461       124         50          93          67          0           
+
+1           56          2145        0           71          94          2           
+
+2           22          0           261         10          0           0           
+
+3           106         98          5           2005        65          1           
+
+4           103         254         0           45          4214        1           
+
+5           0           21          0           2           4           212         
+
+
+Overall Statistics : 
+
+ACC Macro                                                         0.98091
+F1 Macro                                                          0.90684
+FPR Macro                                                         0.01337
+Kappa                                                             0.90728
+Overall ACC                                                       0.94272
+PPV Macro                                                         0.90763
+SOA1(Landis & Koch)                                               Almost Perfect
+TPR Macro                                                         0.90827
+Zero-one Loss                                                     1294
+
+Class Statistics :
+
+Classes                                                           0             1             2             3             4             5             
+ACC(Accuracy)                                                     0.97251       0.96813       0.99615       0.97805       0.97198       0.99863       
+AUC(Area under the ROC curve)                                     0.9723        0.94063       0.94416       0.93425       0.94996       0.94343       
+AUCI(AUC value interpretation)                                    Excellent     Excellent     Excellent     Excellent     Excellent     Excellent     
+F1(F1 score - harmonic mean of precision and sensitivity)         0.97569       0.85629       0.85714       0.88992       0.93014       0.93187       
+FN(False negative/miss/type 2 error)                              334           223           32            275           403           27            
+FP(False positive/type 1 error/false alarm)                       287           497           55            221           230           4             
+FPR(Fall-out or false positive rate)                              0.02929       0.02457       0.00247       0.01088       0.0128        0.00018       
+N(Condition negative)                                             9797          20224         22299         20312         17975         22353         
+P(Condition positive or support)                                  12795         2368          293           2280          4617          239           
+POP(Population)                                                   22592         22592         22592         22592         22592         22592         
+PPV(Precision or positive predictive value)                       0.97749       0.81188       0.82595       0.90072       0.94824       0.98148       
+TN(True negative/correct rejection)                               9510          19727         22244         20091         17745         22349         
+TON(Test outcome negative)                                        9844          19950         22276         20366         18148         22376         
+TOP(Test outcome positive)                                        12748         2642          316           2226          4444          216           
+TP(True positive/hit)                                             12461         2145          261           2005          4214          212           
+TPR(Sensitivity, recall, hit rate, or true positive rate)         0.9739        0.90583       0.89078       0.87939       0.91271       0.88703       
+
+
+NOTES: removed softmax and slicing from forward pass final step and changed according to torch documentation, results are still good. 
+
 
 
 

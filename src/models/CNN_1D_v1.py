@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov 28 19:18:57 2022
-@author: benedict
+@author: Benedict Grey
 
-1 dimensional convolutional neural network with residual blocks  PyTorch implementation (CNN_1D_v1)
+One dimensional convolutional neural network with residual blocks PyTorch implementation (CNN_1D_v1)
 
 """
 
@@ -18,11 +18,13 @@ from pycm import ConfusionMatrix
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pickle
 from scipy.interpolate import make_interp_spline
 from torch.utils.data import DataLoader
 import AIS_loader as data_module
 
+sns.set_style("darkgrid") 
 
 
 # =============================================================================
@@ -63,9 +65,6 @@ class ResBlock(nn.Module):
         return output
         
 
-
-
-
 class CNN_1D(nn.Module):
 
     # =============================================================================
@@ -95,13 +94,6 @@ class CNN_1D(nn.Module):
         self.conv_2 = nn.Conv1d(in_channels=conv_l1, out_channels=conv_l2, kernel_size=kernel_size)
         self.batch_norm_2 = nn.BatchNorm1d(conv_l2)
         
-        
-        # self.res_block_3 = ResBlock(in_channels=conv_l2, out_channels=conv_l2, kernel_size=kernel_size)
-        # self.res_block_4 = ResBlock(in_channels=conv_l2, out_channels=conv_l2, kernel_size=kernel_size)
-        # self.avgpool = nn.AvgPool1d(pool_size)    
-
-        # self.conv_3 = nn.Conv1d(in_channels=conv_l2, out_channels=conv_l2, kernel_size=kernel_size)
-        # self.batch_norm_3 = nn.BatchNorm1d(conv_l2)
 
         
         # configure transformed dimensions of the input as it reaches the fully connected layer
@@ -122,7 +114,6 @@ class CNN_1D(nn.Module):
         self.fc_1 = nn.Linear(flat_size, 128)
         self.fc_2 = nn.Linear(128, 64)
         self.fc_3 = nn.Linear(64, n_classes)
-        self.softmax = nn.LogSoftmax(dim=1)
         
 
 
@@ -143,22 +134,13 @@ class CNN_1D(nn.Module):
         input_x = self.conv_2(input_x)
         input_x = self.batch_norm_2(input_x)
         input_x = self.maxpool(self.relu(input_x))
-
-        # input_x = self.res_block_3(input_x)
-        # input_x = self.res_block_4(input_x)
-        # input_x = self.avgpool(input_x)
-        
-        # input_x = self.conv_3(input_x)
-        # input_x = self.batch_norm_3(input_x)
-        # input_x = self.maxpool(self.relu(input_x))
         
         input_x = self.flatten(input_x)
         input_x = F.relu(self.fc_1(input_x))
         input_x = F.relu(self.fc_2(input_x))
         input_x = F.relu(self.fc_3(input_x))
-        output = self.softmax(input_x)
         
-        return output
+        return input_x
 
 # =============================================================================
 # wrapper class for an instance of the CNN_1D model
@@ -173,8 +155,7 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    datatype = 'linearly interpolated'
-    data_ver = '4'
+    data_ver = '3'
     shuffle = True
     # =============================================================================
     # Hyperparameters
@@ -193,6 +174,7 @@ class CNN_1D_wrapper():
         
         # init class members
         self.dataset = dataset
+        self.datatype = dataset
         self.batch_size = batch_size
         self.version_number = 0
 
@@ -291,7 +273,6 @@ class CNN_1D_wrapper():
                 loss = self.criterion(output, labels)
                 loss.backward()
                 self.optimizer.step()
-                # outputs = torch.zeros(labels.size()[0]).int().to(self.device)
                 outputs = torch.argmax(output, dim=1)
                 aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
             
@@ -648,6 +629,44 @@ class CNN_1D_wrapper():
                 plt.xlabel('epochs')
                 plt.ylabel('loss')
                 plt.show()
+            case 'accuracy':
+                y = np.array(self.history['training_accuracy'])
+                y_2 = np.array(self.history['validation_accuracy'])
+                x = np.arange(len(y)) # number of epochs
+                x_2 = np.arange(len(y_2)) # number of epochs
+                spline = make_interp_spline(x, y)
+                spline_2 = make_interp_spline(x_2, y_2)
+                x_ = np.linspace(x.min(), x.max(), 500)
+                x_2_ = np.linspace(x_2.min(), x_2.max(), 500)
+                y_ = spline(x_)
+                y_2_ = spline_2(x_2_)
+                plt.grid(True)
+                plt.plot(x_, y_, c='green', label='Training accuracy')
+                plt.plot(x_, y_2_, c='orange', label='Validation accuracy')
+                # plt.title('Accuracy')
+                plt.xlabel('epochs')
+                plt.ylabel('accuracy %')
+                plt.legend()
+                plt.show()
+            case 'loss':
+                y = np.array(self.history['training_loss'])
+                y_2 = np.array(self.history['validation_loss'])
+                x = np.arange(len(y)) # number of epochs
+                x_2 = np.arange(len(y_2)) # number of epochs
+                spline = make_interp_spline(x, y)
+                spline_2 = make_interp_spline(x_2, y_2)
+                x_ = np.linspace(x.min(), x.max(), 500)
+                x_2_ = np.linspace(x_2.min(), x_2.max(), 500)
+                y_ = spline(x_)
+                y_2_ = spline_2(x_2_)
+                plt.grid(True)
+                plt.plot(x_, y_, c='green', label='Training loss')
+                plt.plot(x_, y_2_, c='orange', label='Validation loss')
+                # plt.title('Loss')
+                plt.xlabel('epochs')
+                plt.ylabel('loss')
+                plt.legend()
+                plt.show()
                 
                 
     # =============================================================================
@@ -702,12 +721,6 @@ def nonrandom_init(K, dataset):
     with open('saved_models/history/init_histories/CNN_1D_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
-    
-# =============================================================================
-# run random initalisation and then load the model with the highest validation accuracy for more training
-# =============================================================================
-# model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
-# nonrandom_init(K=20, dataset='linear_interp')
 
     
 # =============================================================================
@@ -721,40 +734,42 @@ def load_highest_model(model):
     
     
     
+if __name__ == "__main__":        
+    # =============================================================================
+    # load the best randomly initialised network parameters for further training
+    # =============================================================================
+    nonrand = False
+    # current_dataset = 'linear_interp'
+    current_dataset = 'varying'
     
-# =============================================================================
-# load the best randomly initialised network parameters for further training
-# =============================================================================
-nonrand = False
-current_dataset = 'linear_interp'
-
-if nonrand:
-    nonrandom_init(K=20, dataset=current_dataset)
+    if nonrand:
+        nonrandom_init(K=20, dataset=current_dataset)
+        
+    model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=128, combine=False)
+    # load_highest_model(model)
     
-model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=True)
-# load_highest_model(model)
-
-
-
-# =============================================================================
-# testing zone
-# =============================================================================
-# model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
-model.load_model(2)
-# model.fit(validate=False, epochs=25)
-# model.prune_weights(amount=0.21)
-# model.predict()
-# model.print_params()
-model.print_summary(print_cm=(True))
-# model.save_model(2)
-
-
-
-
-# model.plot('training_accuracy')
-# model.plot('validation_accuracy')
-# model.plot('training_loss')
-# model.plot('validation_loss')
-
-
+    
+    
+    # =============================================================================
+    # testing zone
+    # =============================================================================
+    # model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
+    # model.load_model(2)
+    model.fit(validate=True, epochs=25)
+    # model.prune_weights(amount=0.21)
+    # model.predict()
+    # model.print_params()
+    # model.print_summary(print_cm=(True))
+    # model.save_model(2)
+    
+    
+    
+    
+    # model.plot('training_accuracy')
+    # model.plot('validation_accuracy')
+    # model.plot('training_loss')
+    # model.plot('validation_loss')
+    
+    model.plot('accuracy')
+    model.plot('loss')
 
