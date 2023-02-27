@@ -22,6 +22,8 @@ import seaborn as sns
 import pickle
 from scipy.interpolate import make_interp_spline
 from torch.utils.data import DataLoader
+from datetime import datetime
+
 import AIS_loader as data_module
 
 sns.set_style("darkgrid") 
@@ -164,8 +166,7 @@ class CNN_1D_wrapper():
     kernel_size = 3
     pool_size = 2
     eta = 3e-4
-    alpha = 1e-4
-    weight_decay = 1e-5
+    alpha = 1e-5
     optim_name = ''
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -251,7 +252,7 @@ class CNN_1D_wrapper():
             # valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle)
 
         for epoch in range(epochs):
-
+            start_time = datetime.now()  
             aggregate_correct = 0
             v_correct = 0
             train_loss_counter = 0
@@ -335,6 +336,8 @@ class CNN_1D_wrapper():
                 
             self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
+            end_time = datetime.now()
+            print(f'Epoch duration: {(end_time - start_time)}')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -755,11 +758,11 @@ if __name__ == "__main__":
     # =============================================================================
     # model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
     # model.load_model(2)
-    model.fit(validate=True, epochs=25)
+    model.fit(validate=True, epochs=1)
     # model.prune_weights(amount=0.21)
-    # model.predict()
+    model.predict()
     # model.print_params()
-    # model.print_summary(print_cm=(True))
+    model.print_summary(print_cm=(True))
     # model.save_model(2)
     
     

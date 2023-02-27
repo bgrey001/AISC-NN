@@ -4,7 +4,6 @@
 Created on Sun Feb 26 15:57:22 2023
 @author: Benedict Grey
 
-
 DISCLAIMER:
 Script for the implementation of Shukla and Marlin's mTAN encoder classification network
 All credit goes to the original authors, this is merely an modification of the original code
@@ -15,12 +14,6 @@ https://github.com/reml-lab/mTAN
 # =============================================================================
 # dependencies
 # =============================================================================
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.nn.utils.prune as prune
-
 from pycm import ConfusionMatrix
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,16 +23,15 @@ from scipy.interpolate import make_interp_spline
 from torch.utils.data import DataLoader
 import AIS_loader as data_module
 
-
-
 import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import torch.nn.utils.prune as prune
 
-import time
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import math
@@ -266,12 +258,14 @@ class mTAN_wrapper():
     # Train model
     # =============================================================================
     def fit(self, validate, epochs=None):
+            
+        
         if epochs == None:
             epochs = self.epochs
         else:
             self.epochs = epochs
         
-        train_print_steps = 200
+        train_print_steps = 100
         val_print_steps = plot_steps = 20
         train_loss = valid_loss = 0
 
@@ -281,7 +275,7 @@ class mTAN_wrapper():
             valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
 
         for epoch in range(epochs):
-
+            start_time = datetime.now()   
             aggregate_correct = 0
             v_correct = 0
             train_loss_counter = 0
@@ -369,12 +363,15 @@ class mTAN_wrapper():
                 
             self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
+            end_time = datetime.now()
+            print(f'Epoch duration: {(end_time - start_time)}')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
         self.history['training_loss'] += self.training_losses
         self.history['validation_accuracy'] += self.validation_accuracies
         self.history['validation_loss'] += self.validation_losses
+
 
     # =============================================================================
     # method that tests model on test data
@@ -433,15 +430,17 @@ class mTAN_wrapper():
         
         class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
         if valid:
-            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.mTAN_collate, drop_last=True)
+            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
         else:
-            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.mTAN_collate, drop_last=True)
+            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
        
-        with torch.no_grad():
+        
+        for test_seqs, test_time_steps, test_labels, lengths in test_generator:
+
             self.model.eval()
-            for test_features, test_labels, lengths in test_generator:
-                test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
-                test_output = self.model(test_features)
+            with torch.no_grad():
+                test_seqs, test_time_steps, test_labels = test_seqs.to(self.device), test_time_steps.to(self.device), test_labels.to(self.device)
+                test_output = self.model(test_seqs, test_time_steps)
                 preds = torch.argmax(test_output, dim=1)
 
                 # confmat variables
@@ -501,13 +500,14 @@ class mTAN_wrapper():
     # =============================================================================
     def save_model(self, version_number, init=False):
         self.version_number = version_number
-        if init:
-            torch.save(self.model.state_dict(), f'saved_models/init_param_models/mTAN_v{version_number}.pt')
-        elif self.dataset == 'varying':
-            torch.save(self.model.state_dict(), f'saved_models/zero_padded/mTAN_v{version_number}.pt')
-        elif self.dataset == 'linear_interp':
-            torch.save(self.model.state_dict(), f'saved_models/linear_interp/mTAN_v{version_number}.pt')
+        # if init:
+        #     torch.save(self.model.state_dict(), f'saved_models/init_param_models/mTAN_v{version_number}.pt')
+        # elif self.dataset == 'varying':
+        #     torch.save(self.model.state_dict(), f'saved_models/zero_padded/mTAN_v{version_number}.pt')
+        # elif self.dataset == 'linear_interp':
+        #     torch.save(self.model.state_dict(), f'saved_models/linear_interp/mTAN_v{version_number}.pt')
             
+        torch.save(self.model.state_dict(), f'saved_models/non_linear/mTAN_v{version_number}.pt') 
         print(f'mTAN_v{version_number} state_dict successfully saved')
         self.save_history(version_number, init)
 
@@ -516,13 +516,14 @@ class mTAN_wrapper():
     # =============================================================================
     def load_model(self, version_number, init=False):
         self.version_number = version_number
-        if init:
-            self.model.load_state_dict(torch.load(f'saved_models/init_param_models/mTAN_v{version_number}.pt'))
-        elif self.dataset == 'varying':
-            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/mTAN_v{version_number}.pt'))
-        elif self.dataset == 'linear_interp':
-            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/mTAN_v{version_number}.pt'))
-            
+        # if init:
+        #     self.model.load_state_dict(torch.load(f'saved_models/init_param_models/mTAN_v{version_number}.pt'))
+        # elif self.dataset == 'varying':
+        #     self.model.load_state_dict(torch.load(f'saved_models/zero_padded/mTAN_v{version_number}.pt'))
+        # elif self.dataset == 'linear_interp':
+        #     self.model.load_state_dict(torch.load(f'saved_models/linear_interp/mTAN_v{version_number}.pt'))
+        
+        self.model.load_state_dict(torch.load(f'saved_models/non_linear/mTAN_v{version_number}.pt'))
         print(f'mTAN_v{version_number} state dictionary successfully loaded')
         self.load_history(version_number, init)
 
@@ -547,16 +548,12 @@ class mTAN_wrapper():
     # method that saves history to a pkl file
     # =============================================================================
     def save_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/mTAN_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/mTAN_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-                
+        # if init:
+        #     with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'wb') as f:
+        #         pickle.dump(self.history, f)
+        
+        with open(f'saved_models/history/non_linear/mTAN_v{version_number}_history.pkl', 'wb') as f:
+            pickle.dump(self.history, f)
         print(f'mTAN_v{version_number} history saved')
 
     # =============================================================================
@@ -566,12 +563,9 @@ class mTAN_wrapper():
         if init:
             with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
-        elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/mTAN_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/mTAN_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
+        with open(f'saved_models/history/non_linear/mTAN_v{version_number}_history.pkl', 'rb') as f:
+            self.history = pickle.load(f)
+        
         self.epochs = len(self.history['training_accuracy'])
         print(f'mTAN_v{version_number} history loaded')
 
@@ -771,9 +765,9 @@ def load_highest_model(model):
     
     
     
-if __name__ == "__main__":        
+def main():
     # =============================================================================
-    # load the best randomly initialised network parameters for further training
+    # driver code
     # =============================================================================
     nonrand = False
     current_dataset = 'non_linear'
@@ -787,23 +781,20 @@ if __name__ == "__main__":
                         hidden_dim=64, 
                         optimizer='AdamW', 
                         bidirectional=True, 
-                        batch_size=40, 
+                        batch_size=18, 
                         combine=False)
     
-    
     # load_highest_model(model)
-    
-    
     # =============================================================================
     # testing zone
     # =============================================================================
-    # model.load_model(11)
-    model.fit(validate=True, epochs=25)
+    model.load_model(1)
+    model.fit(validate=True, epochs=15)
     # model.prune_weights(amount=0.2)
-    # model.predict()
-    # model.print_summary(print_cm=True)
+    model.predict()
+    model.print_summary(print_cm=True)
     # model.confusion_matrix()
-    # model.save_model(11)
+    model.save_model(2)
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')
@@ -811,6 +802,11 @@ if __name__ == "__main__":
     # model.plot('validation_loss')
     # model.plot('accuracy')
     # model.plot('loss')
+    
+    
+if __name__ == "__main__":
+    main()        
+
 
 
 

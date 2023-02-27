@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn.utils.prune as prune
+from torch.utils.data import DataLoader
 
 from pycm import ConfusionMatrix
 import numpy as np
@@ -20,7 +21,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 from scipy.interpolate import make_interp_spline
-from torch.utils.data import DataLoader
+from datetime import datetime
+
 import AIS_loader as data_module
 
 sns.set_style("darkgrid") 
@@ -70,8 +72,10 @@ class GRU(nn.Module):
     # =============================================================================
     def forward(self, input_x):
         
+        
         h0 = torch.zeros(self.n_layers * self.bi_dim, self.batch_size, self.hidden_dim).to(self.device) # init hidden state, as it can't exist before the first forward prop
         gru_out, hidden = self.gru(input_x, h0)
+        
         
         """
         We are taking the first and final predictions of each sequence and concatenating them. 
@@ -116,7 +120,6 @@ class GRU_wrapper():
     # =============================================================================
     eta = 3e-4
     alpha = 1e-4
-    # weight_decay = 1e-5
     optim_name = ''
     # =============================================================================
     # constructor method
@@ -204,7 +207,7 @@ class GRU_wrapper():
             valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
 
         for epoch in range(epochs):
-
+            start_time = datetime.now()  
             aggregate_correct = 0
             v_correct = 0
             train_loss_counter = 0
@@ -293,6 +296,8 @@ class GRU_wrapper():
                 
             self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
+            end_time = datetime.now()
+            print(f'Epoch duration: {(end_time - start_time)}')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -674,12 +679,6 @@ def nonrandom_init(K, dataset):
     with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
-    
-# =============================================================================
-# run random initalisation and then load the model with the highest validation accuracy for more training
-# =============================================================================
-# model = GRU_wrapper(GRU, dataset='linear_interp', n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
-# nonrandom_init(K=20, dataset='linear_interp')
 
     
 # =============================================================================
@@ -719,19 +718,19 @@ if __name__ == "__main__":
     # testing zone
     # =============================================================================
     model.load_model(11)
-    model.fit(validate=False, epochs=25)
+    model.fit(validate=False, epochs=10)
     # model.prune_weights(amount=0.2)
     model.predict()
     model.print_summary(print_cm=True)
     # model.confusion_matrix()
-    # model.save_model(11)
+    model.save_model(12)
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')
     # model.plot('training_loss')
     # model.plot('validation_loss')
-    # model.plot('accuracy')
-    # model.plot('loss')
+    model.plot('accuracy')
+    model.plot('loss')
 
 
 
