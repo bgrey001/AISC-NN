@@ -735,12 +735,12 @@ def load_highest_model(model):
         print(f"Highest_idx = {highest_idx}, loaded successfully")
     model.load_model(highest_idx, init=True)
     
-    
-    
-if __name__ == "__main__":        
-    # =============================================================================
+
+# =============================================================================
+# driver code
+# =============================================================================
+def main():
     # load the best randomly initialised network parameters for further training
-    # =============================================================================
     nonrand = False
     # current_dataset = 'linear_interp'
     current_dataset = 'varying'
@@ -775,4 +775,8 @@ if __name__ == "__main__":
     
     model.plot('accuracy')
     model.plot('loss')
+    
+    
+if __name__ == "__main__":        
+    main()
 

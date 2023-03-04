@@ -157,7 +157,8 @@ class mTAN_enc(nn.Module):
             key = self.learn_time_embedding(time_steps).to(self.device) 
         else:
             key = self.time_embedding(time_steps, self.embed_time).to(self.device)
-        att_out = self.att(query=key, key=key, value=x, mask=None)
+        att_out = self.att(query=key, key=key, value=x, mask=None) # key and value are both the embeddings and the value is the feature vector
+        print(att_out.shape)
         gru_out, hidden = self.GRU(att_out)
         class_in = torch.cat((gru_out[:, -1, :self.nhidden], gru_out[:, 0, self.nhidden:]), dim=1)        
         out = self.classifier(class_in)
@@ -265,7 +266,7 @@ class mTAN_wrapper():
         else:
             self.epochs = epochs
         
-        train_print_steps = 100
+        train_print_steps = 200
         val_print_steps = plot_steps = 20
         train_loss = valid_loss = 0
 
@@ -364,7 +365,7 @@ class mTAN_wrapper():
             self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
             end_time = datetime.now()
-            print(f'Epoch duration: {(end_time - start_time)}')
+            print(f'Epoch duration: {(end_time - start_time)}\n')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -730,15 +731,15 @@ def nonrandom_init(K, dataset):
     # models = []
     for k in range(K):
         model = mTAN_wrapper(mTAN_enc, 
-                             dataset=dataset, 
-                             n_units=2, 
-                             hidden_dim=64, 
-                             optimizer='AdamW', 
-                             bidirectional=True, 
-                             batch_size=64, 
-                             combine=False)
+                            dataset=dataset, 
+                            n_gru_units=2, 
+                            hidden_dim=64, 
+                            optimizer='AdamW', 
+                            bidirectional=True, 
+                            batch_size=5, 
+                            combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
-        model.fit(validate=True, epochs=2)
+        model.fit(validate=True, epochs=1)
         # print(models[k].history['validation_accuracy'])
         if max(model.history['validation_accuracy']) > records['highest_accuracy']:
             records['index'] = k + 1
@@ -764,16 +765,14 @@ def load_highest_model(model):
     model.load_model(highest_idx, init=True)
     
     
-    
+# =============================================================================
+# driver code
+# =============================================================================
 def main():
-    # =============================================================================
-    # driver code
-    # =============================================================================
     nonrand = False
     current_dataset = 'non_linear'
     
-    if nonrand:
-        nonrandom_init(K=10, dataset=current_dataset)
+    if nonrand: nonrandom_init(K=10, dataset=current_dataset)
         
     model = mTAN_wrapper(mTAN_enc, 
                         dataset=current_dataset, 
@@ -781,20 +780,20 @@ def main():
                         hidden_dim=64, 
                         optimizer='AdamW', 
                         bidirectional=True, 
-                        batch_size=18, 
+                        batch_size=5, 
                         combine=False)
     
-    # load_highest_model(model)
+    if nonrand: load_highest_model(model)
     # =============================================================================
     # testing zone
     # =============================================================================
-    model.load_model(1)
+    # model.load_model(1)
     model.fit(validate=True, epochs=15)
     # model.prune_weights(amount=0.2)
-    model.predict()
-    model.print_summary(print_cm=True)
+    # model.predict()
+    # model.print_summary(print_cm=True)
     # model.confusion_matrix()
-    model.save_model(2)
+    # model.save_model(2)
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')
