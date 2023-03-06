@@ -2,11 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thur Nov 24 14:30:07 2022
-@author: BenedictGrey
+@author: Benedict Grey
 
 Pre-processing module class current version
 
 """
+# =============================================================================
+# dependencies
+# =============================================================================
 import numpy as np
 from numpy import random
 import pandas as pd
@@ -16,7 +19,6 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from datetime import timedelta
-
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning) # ignore warning for creating views instead of copies
 
 
@@ -28,8 +30,6 @@ class pre_processing_module:
     # constructor method to initialise attributes, import dataset and execute integer encoding
     # =============================================================================
     def __init__(self, dataset, sample_size=None):
-        
-        # init attributes
         if dataset:
             print(f'Processing {dataset} dataset...')
             self.dataset = dataset
@@ -340,21 +340,6 @@ class pre_processing_module:
     # @classmethod
     def return_size(self):
         return len(self.build_sequences())
-
-
-
-
-# =============================================================================
-# ------------------------------------------------------------------------------ # ------------------------------------------------------------------------------
-# end class
-# ------------------------------------------------------------------------------ # ------------------------------------------------------------------------------
-# =============================================================================
-
-
-
-# =============================================================================
-# testing zone
-# =============================================================================
 
 
 

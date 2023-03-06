@@ -72,10 +72,8 @@ class GRU(nn.Module):
     # =============================================================================
     def forward(self, input_x):
         
-        
         h0 = torch.zeros(self.n_layers * self.bi_dim, self.batch_size, self.hidden_dim).to(self.device) # init hidden state, as it can't exist before the first forward prop
         gru_out, hidden = self.gru(input_x, h0)
-        
         
         """
         We are taking the first and final predictions of each sequence and concatenating them. 
@@ -99,33 +97,21 @@ class GRU(nn.Module):
         output = self.fc_3(fc_in)
         return output
 
- 
-    
 # =============================================================================
 # wrapper class for an instance of the GRU_RNN model
 # =============================================================================
 class GRU_wrapper():
-
-    # =============================================================================
-    # Class attributes
-    # =============================================================================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # =============================================================================
-    # Data attributes
-    # =============================================================================
     data_ver = '3'
     shuffle = True
-    # =============================================================================
-    # Hyperparameters
-    # =============================================================================
+    # hyperparameters
     eta = 3e-4
     alpha = 1e-4
     optim_name = ''
     # =============================================================================
-    # constructor method
+    # constructor
     # =============================================================================
     def __init__(self, GRU, dataset, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
-        
         # init class members
         self.dataset = dataset
         self.version_number = 0
@@ -149,8 +135,7 @@ class GRU_wrapper():
         self.epochs = len(self.history['training_accuracy'])
 
         # init dataset class objects
-        if combine:
-            self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver, split_2='valid')
+        if combine: self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver, split_2='valid')
         else:
             self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver)
             self.valid_data = data_module.AIS_loader(choice=self.dataset, split='valid', version=self.data_ver)
@@ -169,61 +154,43 @@ class GRU_wrapper():
                          bidirectional=bidirectional).to(self.device)
 
         match optimizer:
-            case 'AdamW':
-                self.optimizer = optim.AdamW(self.model.parameters(), lr=self.eta, weight_decay=self.alpha)
-            case 'SGD':
-                self.optimizer = optim.SGD(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
-            case 'RMSprop':
-                self.optimizer = optim.RMSprop(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
-
+            case 'AdamW': self.optimizer = optim.AdamW(self.model.parameters(), lr=self.eta, weight_decay=self.alpha)
+            case 'SGD': self.optimizer = optim.SGD(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
+            case 'RMSprop': self.optimizer = optim.RMSprop(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
         self.optim_name = optimizer
         self.criterion = nn.CrossEntropyLoss()
 
     def class_from_output(self, output, is_tensor):
-        # print(output)
-        if is_tensor:
-            # print(output)
-            class_index = torch.argmax(output).item()
-        else:
-            class_index = int(output)
+        if is_tensor: class_index = torch.argmax(output).item()
+        else: class_index = int(output)
         return self.data_loader.return_classes()[class_index]
 
     # =============================================================================
     # Train model
     # =============================================================================
     def fit(self, validate, epochs=None):
-        if epochs == None:
-            epochs = self.epochs
-        else:
-            self.epochs = epochs
-        
+        if epochs == None: epochs = self.epochs
+        else: self.epochs = epochs
         train_print_steps = 200
         val_print_steps = plot_steps = 20
         train_loss = valid_loss = 0
-
         # instantiate DataLoader
         train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.GRU_collate, drop_last=True)
-        if validate:
-            valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
-
+        if validate: valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
         for epoch in range(epochs):
             start_time = datetime.now()  
             aggregate_correct = 0
             v_correct = 0
             train_loss_counter = 0
             valid_loss_counter = 0
-
             # =============================================================================
             # training loop
             # =============================================================================
-            index = 0
-            for features, labels, lengths in train_generator:
-                # with torch.no_grad():
+            for idx, (features, labels, lengths) in enumerate(train_generator):
                 self.model.train()
                 features, labels = features.to(self.device), labels.to(self.device) # transfer to GPU
                 # forward propagation
                 output = self.model(features)
-
                 # backpropagation
                 loss = self.criterion(output, labels)
                 self.optimizer.zero_grad()
@@ -231,31 +198,22 @@ class GRU_wrapper():
                 self.optimizer.step()
                 outputs = torch.argmax(output, dim=1)
                 aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
-            
-                if index == 0 and epoch == 0:
+                if idx == 0 and epoch == 0:
                     first_accuracy = aggregate_correct
                     print(f'Initial accuracy = {first_accuracy}')
-                    
-                if (index + 1) % plot_steps == 0:
-                    # metric = MulticlassAccuracy(num_classes=self.n_classes, average=None).to(self.device)
-                    # print(metric(outputs, labels))
-                    if (index + 1) % train_print_steps == 0:
-                        print(f'Epoch {epoch}, batch number: {index + 1}, training loss = {loss}')
+                if (idx + 1) % plot_steps == 0:
+                    if (idx + 1) % train_print_steps == 0:
+                        print(f'Epoch {epoch}, batch number: {idx + 1}, training loss = {loss}')
                     train_loss_counter += 1
                     train_loss += loss.item()
-                            
-                index += 1
-                
             train_accuracy = aggregate_correct / (len(train_generator))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
             print("========================================================================================================================================================== \n" +
                   f"------------------> training accuracy = {train_accuracy}, average training loss = {train_loss / train_loss_counter} <------------------\n" +
                   "========================================================================================================================================================== \n")
-
             train_loss = 0
             train_loss_counter = 0
-
             # =============================================================================
             # validation loop
             # =============================================================================
@@ -265,22 +223,15 @@ class GRU_wrapper():
                     self.model.eval()
                     valid_features, valid_labels = valid_features.to(self.device), valid_labels.to(self.device)
                     with torch.no_grad():
-                        # forward propagataion
                         valid_output = self.model(valid_features)
-                        # calculate loss and valid_loss
                         v_loss = self.criterion(valid_output, valid_labels)
                         valid_outputs = torch.argmax(valid_output, dim=1)
-                        # valid_outputs = torch.zeros(valid_labels.size()[0]).int().to(self.device)
                         v_correct += ((valid_outputs == valid_labels).sum().item() / len(valid_labels)) * 100
-
                         if (v_index + 1) % plot_steps == 0:
-                            # metric = MulticlassAccuracy(num_classes=self.n_classes, average=None).to(self.device)
-                            # print(metric(valid_outputs, valid_labels))
                             if (v_index + 1) % val_print_steps == 0:
                                 print(f'Epoch {epoch}, validation batch number: {v_index + 1}, validation loss = {v_loss}')
                             valid_loss_counter += 1
                             valid_loss += v_loss.item()
-                            
                     v_index += 1
                 val_accuracy = v_correct / (len(valid_generator))
                 self.validation_accuracies.append(val_accuracy)
@@ -288,12 +239,9 @@ class GRU_wrapper():
                 print("========================================================================================================================================================== \n" +
                       f" ------------------> validation accuracy = {val_accuracy}, average validation loss = {valid_loss / valid_loss_counter} <------------------" +
                       "========================================================================================================================================================== \n")
-
                 valid_loss = 0
                 valid_loss_counter = 0
-            else:
-                self.predict()
-                
+            else: self.predict()
             self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
             end_time = datetime.now()
@@ -309,29 +257,21 @@ class GRU_wrapper():
     # method that tests model on test data
     # =============================================================================
     def predict(self):
-
         test_correct = test_loss_counter = test_loss = 0
         test_print_steps = 20
-        
         test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
-        test_index = 0
-        for test_features, test_labels, lengths in test_generator:
+        for test_index, (test_features, test_labels, lengths) in enumerate(test_generator):
             self.model.eval()
             with torch.no_grad():
                 test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
                 test_output = self.model(test_features)
-                
-                # calculate loss and valid_loss
                 t_loss = self.criterion(test_output, test_labels)
                 test_outputs = torch.argmax(test_output, dim=1)
-                # test_outputs = torch.zeros(test_labels.size()[0]).int().to(self.device)
                 test_correct += ((test_outputs == test_labels).sum().item() / len(test_labels)) * 100 
-
                 if (test_index + 1) % (test_print_steps) == 0:
                     print(f'test batch number: {test_index + 1}, test loss = {t_loss}')
                     test_loss_counter += 1
                     test_loss += t_loss.item()
-            test_index += 1
 
         test_accuracy = test_correct / (len(test_generator))
         self.test_losses.append(test_loss/test_loss_counter)
@@ -339,11 +279,8 @@ class GRU_wrapper():
         print("========================================================================================================================================================== \n" +
               f" ------------------> test accuracy = {test_accuracy}, average test loss = {test_loss / test_loss_counter} <------------------" +
               "========================================================================================================================================================== \n")
-
         test_loss = 0
         test_loss_counter = 0
-
-        # history
         self.history['test_accuracy'] += self.test_accuracies
         self.history['test_loss'] += self.test_losses
 
@@ -354,16 +291,11 @@ class GRU_wrapper():
     # method to build confusion matrix
     # =============================================================================
     def confusion_matrix(self, valid=False, save_fig=False, print_confmat=False):
-        
         test_correct = 0
         predicted, labels = [], []
         n_correct = 0
-        
-        class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
-        if valid:
-            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
-        else:
-            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+        if valid: test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+        else: test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
        
         with torch.no_grad():
             self.model.eval()
@@ -375,19 +307,15 @@ class GRU_wrapper():
                 # confmat variables
                 predicted.append(preds.cpu().detach().numpy())
                 labels.append(test_labels.cpu().detach().numpy())
-
                 n_correct += ((preds == test_labels).sum().item() / len(test_labels)) * 100 
                 test_correct += (preds == test_labels).sum().item()
         
         predicted = np.concatenate(predicted).ravel().tolist()
         labels = np.concatenate(labels).ravel().tolist()
-    
         confmat = ConfusionMatrix(actual_vector=labels, predict_vector=predicted)
-        
         if print_confmat:
             confmat.print_matrix()
             confmat.stat(summary=True)
-        
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
             plt.savefig(f'GRU_v{self.version_number}.png', dpi=300)
@@ -424,19 +352,14 @@ class GRU_wrapper():
     def total_params(self):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         
-
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
     def save_model(self, version_number, init=False):
         self.version_number = version_number
-        if init:
-            torch.save(self.model.state_dict(), f'saved_models/init_param_models/GRU_v{version_number}.pt')
-        elif self.dataset == 'varying':
-            torch.save(self.model.state_dict(), f'saved_models/zero_padded/GRU_v{version_number}.pt')
-        elif self.dataset == 'linear_interp':
-            torch.save(self.model.state_dict(), f'saved_models/linear_interp/GRU_v{version_number}.pt')
-            
+        if init: torch.save(self.model.state_dict(), f'saved_models/init_param_models/GRU_v{version_number}.pt')
+        elif self.dataset == 'varying': torch.save(self.model.state_dict(), f'saved_models/zero_padded/GRU_v{version_number}.pt')
+        elif self.dataset == 'linear_interp': torch.save(self.model.state_dict(), f'saved_models/linear_interp/GRU_v{version_number}.pt')
         print(f'GRU_v{version_number} state_dict successfully saved')
         self.save_history(version_number, init)
 
@@ -445,13 +368,9 @@ class GRU_wrapper():
     # =============================================================================
     def load_model(self, version_number, init=False):
         self.version_number = version_number
-        if init:
-            self.model.load_state_dict(torch.load(f'saved_models/init_param_models/GRU_v{version_number}.pt'))
-        elif self.dataset == 'varying':
-            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/GRU_v{version_number}.pt'))
-        elif self.dataset == 'linear_interp':
-            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/GRU_v{version_number}.pt'))
-            
+        if init: self.model.load_state_dict(torch.load(f'saved_models/init_param_models/GRU_v{version_number}.pt'))
+        elif self.dataset == 'varying': self.model.load_state_dict(torch.load(f'saved_models/zero_padded/GRU_v{version_number}.pt'))
+        elif self.dataset == 'linear_interp': self.model.load_state_dict(torch.load(f'saved_models/linear_interp/GRU_v{version_number}.pt'))
         print(f'GRU_v{version_number} state dictionary successfully loaded')
         self.load_history(version_number, init)
 
@@ -601,7 +520,6 @@ class GRU_wrapper():
                 plt.grid(True)
                 plt.plot(x_, y_, c='green', label='Training accuracy')
                 plt.plot(x_, y_2_, c='orange', label='Validation accuracy')
-                # plt.title('Accuracy')
                 plt.xlabel('epochs')
                 plt.ylabel('accuracy %')
                 plt.legend()
@@ -620,7 +538,6 @@ class GRU_wrapper():
                 plt.grid(True)
                 plt.plot(x_, y_, c='green', label='Training loss')
                 plt.plot(x_, y_2_, c='orange', label='Validation loss')
-                # plt.title('Loss')
                 plt.xlabel('epochs')
                 plt.ylabel('loss')
                 plt.legend()
@@ -662,19 +579,16 @@ class GRU_wrapper():
 def nonrandom_init(K, dataset):
     print(f'Beginning random initalisation with {K} different models')
     records = {'index': None, 'highest_accuracy': 0}
-    # models = []
     for k in range(K):
         model = GRU_wrapper(GRU, dataset=dataset, n_units=2, hidden_dim=64, optimizer='AdamW', bidirectional=True, batch_size=64, combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=2)
-        # print(models[k].history['validation_accuracy'])
         if max(model.history['validation_accuracy']) > records['highest_accuracy']:
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
             records['highest_accuracy'] = max(model.history['validation_accuracy'])
         model.save_model(k + 1, init=True)
         del model
-        
     # save highest index 
     with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
@@ -713,7 +627,6 @@ def main():
                         batch_size=64, 
                         combine=True)
     # load_highest_model(model)
-    
     
     # =============================================================================
     # testing zone

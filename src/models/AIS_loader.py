@@ -4,10 +4,10 @@
 Created on Mon Nov 28 11:18:55 2022
 @author: Benedict Grey
 
-Script implementing customised PyTorch Dataset and DataLoader classes
+Script implementing customised PyTorch Dataset class
 
-Data fields for:
-    
+Data fields:
+<--------------------------------------------------------------------->
     Varying time series:
         speed | lat | lon | delta_time | delta_course | target
         
@@ -16,17 +16,15 @@ Data fields for:
         
     Varying for non-linear attention interpolation:
         speed | lat | lon | delta_time_cum | delta_course | target
-
+<--------------------------------------------------------------------->
 """
-
-import torch
-import torchvision
-from torch.utils.data import Dataset, DataLoader
-
 import numpy as np
 import random
 import pickle
 import matplotlib.pyplot as plt
+
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 class AIS_loader(Dataset):
     
@@ -50,14 +48,12 @@ class AIS_loader(Dataset):
             self.n_classes = obj[1]
             self.seq_length = obj[2]
             
-                
     def __getitem__(self, index):
         sequence = self.seq_list[index]
         features = sequence[:, :-1]
         labels = sequence[0, -1]
         return torch.tensor(features), labels, len(features)
         
-    
     def __len__(self):
         return len(self.seq_list)
     
@@ -79,8 +75,6 @@ class AIS_loader(Dataset):
         
         sequences = torch.transpose(input=sequences, dim0=1, dim1=2) # transpose sequences
         return sequences.float(), labels.long(), lengths.long()
-    
-    
     
     # =============================================================================
     # same as CNN_collate but doesn't transpose the matrix 
@@ -105,7 +99,6 @@ class AIS_loader(Dataset):
         else:
             return sequences.float(), labels.long(), lengths.long()
     
-
         
     # =============================================================================
     # method that randomly visualises the tensor sequences from the class
@@ -121,46 +114,47 @@ class AIS_loader(Dataset):
 
 
 # =============================================================================
-# testing zone
+# driver code
 # =============================================================================
-# if __name__ == "__main__":
-#     dataset = AIS_loader(choice='non_linear', split='test', version=1)
-#     dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
-    # dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
-    # dataset.visualise_tensor(250)
+def main():
+    dataset = AIS_loader(choice='non_linear', split='test', version=1)
+    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
+    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
+    dataset.visualise_tensor(250)
     
-    # for batch_seqs, batch_time_steps, labels, lengths in dataloader:
-    #     feature = batch_seqs[0]
-    #     print(batch_time_steps.shape)
-    #     time_steps = batch_time_steps[0]
-    #     # print(feature)
-    #     print(time_steps)
-    #     # print(batch_seqs.shape)
-    #     break
+    for batch_seqs, batch_time_steps, labels, lengths in dataloader:
+        feature = batch_seqs[0]
+        print(batch_time_steps.shape)
+        time_steps = batch_time_steps[0]
+        # print(feature)
+        print(time_steps)
+        # print(batch_seqs.shape)
+        break
     
-    # for batch_seqs, labels, lengths in dataloader:
-    #     feature = batch_seqs[0]
-    #     # print(batch_time_steps.shape)
-    #     # time_steps = batch_time_steps[0]
-    #     print(batch_seqs.shape)
-    #     break
+    for batch_seqs, labels, lengths in dataloader:
+        feature = batch_seqs[0]
+        # print(batch_time_steps.shape)
+        # time_steps = batch_time_steps[0]
+        print(batch_seqs.shape)
+        break
         
         
         # plot for GRUs
-        # plt.plot(feature[:, 2], feature[:, 3])
-        # plt.scatter(feature[:, 2], feature[:, 3], s=8)
-        # plt.show()
+        plt.plot(feature[:, 2], feature[:, 3])
+        plt.scatter(feature[:, 2], feature[:, 3], s=8)
+        plt.show()
         
         # plot for CNNs
-        # plt.plot(feature[2, :], feature[3, :])
-        # plt.scatter(feature[2, :], feature[3, :], s=8)
-        # plt.show()
-        # break
+        plt.plot(feature[2, :], feature[3, :])
+        plt.scatter(feature[2, :], feature[3, :], s=8)
+        plt.show()
+        break
         
     # print(sample_item)
 
 
-
+if __name__ == "__main__":
+    main()
 
 
 

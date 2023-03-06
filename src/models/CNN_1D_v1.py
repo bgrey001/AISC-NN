@@ -33,19 +33,15 @@ sns.set_style("darkgrid")
 # custom Residual block
 # =============================================================================
 class ResBlock(nn.Module):
-    
     # =============================================================================
     # constructor
     # =============================================================================
     def __init__(self, in_channels, out_channels, kernel_size):
         super(ResBlock, self).__init__()
-        
         self.conv_1 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=1)
         self.batch_norm_1 = nn.BatchNorm1d(out_channels)
-        
         self.conv_2 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=1)
         self.batch_norm_2 = nn.BatchNorm1d(out_channels)
-        
         self.relu = nn.LeakyReLU()
         
     # =============================================================================
@@ -68,18 +64,15 @@ class ResBlock(nn.Module):
         
 
 class CNN_1D(nn.Module):
-
     # =============================================================================
     # class attributes
     # =============================================================================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # =============================================================================
     # constructor
     # =============================================================================
     def __init__(self, n_features, n_classes, seq_length, conv_l1, kernel_size, pool_size):
         super(CNN_1D, self).__init__()
-
         # calculate channel sizes for the different convolution layers
         conv_l2 = 2 * conv_l1
         conv_l3 = conv_l2
@@ -95,8 +88,6 @@ class CNN_1D(nn.Module):
         
         self.conv_2 = nn.Conv1d(in_channels=conv_l1, out_channels=conv_l2, kernel_size=kernel_size)
         self.batch_norm_2 = nn.BatchNorm1d(conv_l2)
-        
-
         
         # configure transformed dimensions of the input as it reaches the fully connected layer
         conv_l1_dim = math.floor((seq_length - (kernel_size - 1))/ pool_size)
@@ -128,7 +119,6 @@ class CNN_1D(nn.Module):
         input_x = self.batch_norm_1(input_x)
         input_x = self.maxpool(self.relu(input_x))
 
-
         input_x = self.res_block_1(input_x)
         input_x = self.res_block_2(input_x)
         input_x = self.avgpool(input_x)
@@ -148,12 +138,10 @@ class CNN_1D(nn.Module):
 # wrapper class for an instance of the CNN_1D model
 # =============================================================================
 class CNN_1D_wrapper():
-
     # =============================================================================
     # Class attributes
     # =============================================================================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # =============================================================================
     # Data attributes
     # =============================================================================
@@ -751,8 +739,6 @@ def main():
     model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=128, combine=False)
     # load_highest_model(model)
     
-    
-    
     # =============================================================================
     # testing zone
     # =============================================================================
@@ -764,8 +750,6 @@ def main():
     # model.print_params()
     model.print_summary(print_cm=(True))
     # model.save_model(2)
-    
-    
     
     
     # model.plot('training_accuracy')

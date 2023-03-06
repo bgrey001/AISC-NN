@@ -160,6 +160,20 @@ Running experiments on mTAN network (very slow)
 Researched techniques for SVM multiclass classification using multivariate time series data
 
 
+Mon Mar 6 16:13:09 2023
+------------------------------------------------>
+Tuning of mTAN is ongoing due to long training times, best val acc so far is 92% -> update: 93%
+Working on how to process data for SVM or RF
+Feature extraction is a strong possibility as shown by Sanchez Pedroche et al.
+Began feature extraction, computationally expensive
+Added preprocessing for feature extraction to combine_datasets.py
+Began layout for part 3 LaTeX
+
+
+Tue Mar 7 16:13:09 2023
+------------------------------------------------>
+
+
 
     
 BACKLOG:
@@ -168,7 +182,10 @@ In progress:
 * Train 1D CNN and GRU models on linearly interpolated data using similar methodology and complexity, gain best possible results - done for lower resolution
 * Non-linear interpolation using the reference time points generated on the AIS data then classify - in progress
 * Implement SVM on all data pipelines for comparison - research in progress
-
+	+ Problem encountered - data structure is wrong format for trad ML models
+	+ SVM computation is far too expensive due to the number of examples, an alternative data processing method has to be implemented
+* Try feature extraction, seems to be the commonly done thing - Sanchez Pedroche et al. and Kim and Lee use this to test SVMs and DTs
+* Keep tuning mTAN, try embed_time up to a much larger number - use nonrandom init
 
 Not started:
 * Begin evaluation of results
