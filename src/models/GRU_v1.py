@@ -7,7 +7,9 @@ Created on Tue Nov 29 13:57:37 2022
 Gated recurrent unit network implementation with PyTorch (GRU_v1)
 
 """
-
+# =============================================================================
+# dependencies
+# =============================================================================
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -31,12 +33,7 @@ sns.set_style("darkgrid")
 # model class inherits from torch Module class
 # =============================================================================
 class GRU(nn.Module):
-
-    # =============================================================================
-    # class attributes
-    # =============================================================================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # =============================================================================
     # constructor
     # =============================================================================
@@ -74,7 +71,7 @@ class GRU(nn.Module):
         
         h0 = torch.zeros(self.n_layers * self.bi_dim, self.batch_size, self.hidden_dim).to(self.device) # init hidden state, as it can't exist before the first forward prop
         gru_out, hidden = self.gru(input_x, h0)
-        
+
         """
         We are taking the first and final predictions of each sequence and concatenating them. 
         This represents the final outputs of the GRU for forward and reverse directions:
@@ -82,7 +79,7 @@ class GRU(nn.Module):
             gru_out[:, 0, self.hidden_dim:]  is the last hidden state of the backward pass
             fc_in = torch.cat((gru_out[:, -1, :self.hidden_dim], gru_out[:, 0, self.hidden_dim:]), dim=1)
         
-        The following method produces the same results (have opted for the first method as involves less data transformations):
+        The following method produces the same results (have opted for the first method as involves fewer data transformations):
             hidden = hidden.view(self.n_layers, self.bi_dim, self.batch_size, self.hidden_dim)
             hidden = hidden[-1]
             hidden_forward, hidden_backward = hidden[0], hidden[1]
@@ -625,17 +622,17 @@ def main():
                         optimizer='AdamW', 
                         bidirectional=True, 
                         batch_size=64, 
-                        combine=True)
+                        combine=False)
     # load_highest_model(model)
     
     # =============================================================================
     # testing zone
     # =============================================================================
-    model.load_model(12)
-    # model.fit(validate=False, epochs=10)
+    model.load_model(3)
+    # model.fit(validate=True, epochs=30)
     # model.prune_weights(amount=0.2)
     # model.predict()
-    # model.print_summary(print_cm=True)
+    model.print_summary(print_cm=True)
     # model.confusion_matrix()
     # model.save_model(12)
     
@@ -643,8 +640,8 @@ def main():
     # model.plot('validation_accuracy')
     # model.plot('training_loss')
     # model.plot('validation_loss')
-    model.plot('accuracy')
-    model.plot('loss')
+    # model.plot('accuracy')
+    # model.plot('loss')
 
     
 if __name__ == "__main__":  

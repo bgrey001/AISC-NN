@@ -56,6 +56,8 @@ class CNN_1D_v1(nn.Module):
     def forward(self, input_x):
 
         # conv layers 1
+        print(input_x.shape)
+        quit()
         input_x = self.conv_1(input_x)
         input_x = self.relu_1(input_x)
         input_x = self.pool_1(input_x)

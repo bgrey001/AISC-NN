@@ -35,8 +35,8 @@ from tqdm import tqdm
 # load data
 # starting with the standardised unpadded varying time sequences 
 # =============================================================================
-choice ='varying'
-version = '3'
+choice ='linear_interp'
+version = '6'
 def load_sequences(split):
     np.random.seed(15) # set random seed to reproduce random results
     with open(f'../../data/pkl/{choice}/{split}_v{version}.pkl', 'rb') as f:
@@ -73,7 +73,7 @@ def test_sample_size(train_seq_list, test_seq_list, valid_seq_list):
 # extract targets and features from sequences and then perform feature extraction using tsfresh
 # =============================================================================
 def process(seq_list, select, save, save_version):
-    out_df = pd.DataFrame(columns = ['id','time','f1', 'f2', 'f3', 'f4', 'f5'])
+    out_df = pd.DataFrame(columns = ['id','time','f1', 'f2', 'f3', 'f4'])
     targets = []
     
     for idx, seq in enumerate(tqdm(seq_list)):
@@ -81,7 +81,7 @@ def process(seq_list, select, save, save_version):
         seq_targ = seq[:, -1][0]
         targets.append(seq_targ)
         
-        sub_df = pd.DataFrame(seq_feat, columns=['f1', 'f2', 'f3', 'f4', 'f5'])
+        sub_df = pd.DataFrame(seq_feat, columns=['f1', 'f2', 'f3', 'f4'])
         sub_df.insert(loc=0, column='time', value=sub_df.index)
         sub_df.insert(loc=0, column='id', value=idx)
         
@@ -90,11 +90,18 @@ def process(seq_list, select, save, save_version):
         
     targets = pd.Series(targets)
     
+    if save:
+        with open(f'../../data/pkl/feature_extraction/dfs_v{save_version}.pkl', 'wb') as f:
+            pickle.dump([out_df, targets], f)
+        print(f'Saved v{save_version}')
+    
     # extract features
     extraction_settings = ComprehensiveFCParameters() # this can be tuned?
     
     # each sequence is being pushed into a single row with all features extracted along the y axis
     X_fe = extract_features(out_df, column_id='id', column_sort='time', default_fc_parameters=extraction_settings, impute_function=impute)
+
+    
     
     # feature selection
     if select:

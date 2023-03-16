@@ -45,12 +45,14 @@ class AIS_loader(Dataset):
         with open(f'../../data/pkl/{choice}/utils_v{version}.pkl', 'rb') as f:
             obj = pickle.load(f)
             self.n_features = obj[0]
+            # self.n_features = 4
             self.n_classes = obj[1]
             self.seq_length = obj[2]
             
     def __getitem__(self, index):
         sequence = self.seq_list[index]
         features = sequence[:, :-1]
+        # features = features[:, [0, 3, 4]]
         labels = sequence[0, -1]
         return torch.tensor(features), labels, len(features)
         
@@ -116,45 +118,47 @@ class AIS_loader(Dataset):
 # =============================================================================
 # driver code
 # =============================================================================
-def main():
-    dataset = AIS_loader(choice='non_linear', split='test', version=1)
-    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
-    dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
-    dataset.visualise_tensor(250)
-    
-    for batch_seqs, batch_time_steps, labels, lengths in dataloader:
-        feature = batch_seqs[0]
-        print(batch_time_steps.shape)
-        time_steps = batch_time_steps[0]
-        # print(feature)
-        print(time_steps)
-        # print(batch_seqs.shape)
-        break
-    
-    for batch_seqs, labels, lengths in dataloader:
-        feature = batch_seqs[0]
-        # print(batch_time_steps.shape)
-        # time_steps = batch_time_steps[0]
-        print(batch_seqs.shape)
-        break
-        
-        
-        # plot for GRUs
-        plt.plot(feature[:, 2], feature[:, 3])
-        plt.scatter(feature[:, 2], feature[:, 3], s=8)
-        plt.show()
-        
-        # plot for CNNs
-        plt.plot(feature[2, :], feature[3, :])
-        plt.scatter(feature[2, :], feature[3, :], s=8)
-        plt.show()
-        break
-        
+# =============================================================================
+# def main():
+#     dataset = AIS_loader(choice='non_linear', split='test', version=1)
+#     dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.GRU_collate))
+#     dataloader = DataLoader(dataset=dataset, batch_size=64, shuffle=True, collate_fn=(dataset.CNN_collate))
+#     dataset.visualise_tensor(250)
+#     
+#     for batch_seqs, batch_time_steps, labels, lengths in dataloader:
+#         feature = batch_seqs[0]
+#         print(batch_time_steps.shape)
+#         time_steps = batch_time_steps[0]
+#         # print(feature)
+#         print(time_steps)
+#         # print(batch_seqs.shape)
+#         break
+#     
+#     for batch_seqs, labels, lengths in dataloader:
+#         feature = batch_seqs[0]
+#         # print(batch_time_steps.shape)
+#         # time_steps = batch_time_steps[0]
+#         print(batch_seqs.shape)
+#         break
+#         
+#         
+#         # plot for GRUs
+#         plt.plot(feature[:, 2], feature[:, 3])
+#         plt.scatter(feature[:, 2], feature[:, 3], s=8)
+#         plt.show()
+#         
+#         # plot for CNNs
+#         plt.plot(feature[2, :], feature[3, :])
+#         plt.scatter(feature[2, :], feature[3, :], s=8)
+#         plt.show()
+#         break
+#         
+# =============================================================================
     # print(sample_item)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+    # main()
 
 
 

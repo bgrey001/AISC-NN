@@ -48,7 +48,7 @@ random.seed(42)
 # =============================================================================
 # options: 'varying', 'linear_interp', 'non_linear', 'feature_extraction'
 # =============================================================================
-choice = 'non_linear'
+choice = 'linear_interp'
 saving = True
 n_classes = 6
 
@@ -177,7 +177,7 @@ match choice:
     # =============================================================================
     # linear interpolation   
     # =============================================================================
-        save_version = 5 # latest version is 4
+        save_version = 6 # latest version is 4
         n_features = 4
         module = ppm.pre_processing_module("")
         
@@ -188,7 +188,7 @@ match choice:
         trawlers_vessel_list = trawlers_module.partition_vessels()
         drifting_vessel_list = drifting_module.partition_vessels()
     
-        target_interval = 1 # just for testing keep this higher otherwise it will be expensive compute
+        target_interval = 60
         
         # join datasets together
         df = pd.concat([

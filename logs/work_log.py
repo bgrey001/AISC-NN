@@ -170,10 +170,16 @@ Added preprocessing for feature extraction to combine_datasets.py
 Began layout for part 3 LaTeX
 
 
-Tue Mar 7 16:13:09 2023
+Wed Mar 15 15:09:32 2023
 ------------------------------------------------>
+After much trial and error with feature extraction and other methods for implementing the SVM, the dataset is simply too large for this model. 
+Therefore, a new tactic to implement a traditional machine learning classification model has been undertaken: logistic regression with PyTorch
+Simultaneously, final tests need to be conducted on the attention network for GRU and CNN classification modules to produce results
+Introduce AUC as metric for write up?
 
-
+Thu Mar 16 08:58:15 2023
+------------------------------------------------>
+How does a linear model take the time series data?
 
     
 BACKLOG:
@@ -200,7 +206,33 @@ Finished:
 
 
 
-   
+
+
+==============================================================================
+Write up notes:
+==============================================================================
+Concepts:
+Explore attention mechanism, time embeddings (positional vs learned)
+Logistic regression -> linear model for comparison
+
+Metrics:
+Introduce AUC as metric and disadvantages for class imbalance?
+Or maybe average precision to determine the performance on smaller classes?
+Introduce time per epoch as metric for evaluation
+
+Results:
+Results of lin interp CNN and GRU
+Results from mTAN CNN and GRU
+Results from feature extraction to ML model (linear and svm perhaps?) - in doubt
+
+Statistical analysis:
+avg distance (distance of each sequence) per class
+avg speed per class
+avg cumulative course change per class
+visualisations!
+
+Further discussion:
+Remember all challenges faces:   
     
 DATA PIPELINES:
 ------------------------------------------------>

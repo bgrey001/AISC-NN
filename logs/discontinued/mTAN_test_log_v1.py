@@ -1,6 +1,6 @@
 """
 =================================================================================================================================
-----------------------------------------> mTAN TEST LOG  <------------------------------------------
+----------------------------------------> mTANGRU TEST LOG  <------------------------------------------
 =================================================================================================================================
 
 TEST 1:
@@ -152,6 +152,58 @@ TP(True positive/hit)                                             12397         
 TPR(Sensitivity, recall, hit rate, or true positive rate)         0.96738       0.77505       0.75779       0.71882       0.79825       0.86139      
 
 NOTES: No nonrandom init, unstable training, training loss seems to be hitting a wall, unexpected. Batch size reduction made quicker epoch time (48 mins), next to try is batch size of 1 and nonrandom init
+
+
+
+
+
+TEST 2:
+---------------------------------------->
+Model: mTAN_v3 -> Hyperparamters: 
+Learnig rate = 0.0003 
+Optimiser = AdamW 
+Loss = CrossEntropyLoss 
+Batch size = 10 
+Epochs = 32 
+Model structure: 
+mTAN_enc(
+  (att): multiTimeAttention(
+    (linears): ModuleList(
+      (0): Linear(in_features=16, out_features=16, bias=True)
+      (1): Linear(in_features=16, out_features=16, bias=True)
+      (2): Linear(in_features=4, out_features=64, bias=True)
+    )
+  )
+  (GRU): GRU(64, 64, num_layers=2, batch_first=True, bidirectional=True)
+  (periodic): Linear(in_features=1, out_features=15, bias=True)
+  (linear): Linear(in_features=1, out_features=1, bias=True)
+  (classifier): Sequential(
+    (0): Linear(in_features=128, out_features=128, bias=True)
+    (1): Linear(in_features=128, out_features=64, bias=True)
+    (2): Linear(in_features=64, out_features=6, bias=True)
+  )
+) 
+Total parameters = 150470
+Data: non_linear, v1 
+Sequence length = 2931 
+Batch size = 10 
+Shuffled = True
+
+Metric table
+=====================================================================================================================
+|  Training accuracy  |  Training loss  |  Validation accuracy  |  Validation loss  |  Test accuracy  |  Test loss  |
+=====================================================================================================================
+|        95.087%      |      0.119      |        92.717%        |       0.164       |      92.832%    |     0.266   |
+=====================================================================================================================
+
+Class F1-score table
+=====================================================================================================================
+|   Drifting longlines   |    Fixed gear    |   Pole and line   |   Purse seines   |    Trawlers    |    Trollers   |
+=====================================================================================================================
+|         96.753%        |      83.235%     |      86.301%      |     82.864%      |     91.921%    |    95.025%    |
+=====================================================================================================================
+
+
 
 
 

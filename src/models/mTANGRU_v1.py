@@ -710,24 +710,25 @@ def main():
     model = mTAN_wrapper(mTAN_enc, 
                         dataset=current_dataset, 
                         n_gru_units=2, 
-                        embed_time=256,
+                        embed_time=16,
                         hidden_dim=64,
                         optimizer='AdamW', 
                         bidirectional=True, 
-                        batch_size=15, 
+                        batch_size=10, 
                         combine=False)
     
-    load_highest_model(model)
+    # load_highest_model(model)
+    
     # =============================================================================
     # testing zone
     # =============================================================================
-    # model.load_model(1)
-    model.fit(validate=True, epochs=30)
+    model.load_model(3)
+    # model.fit(validate=True, epochs=10)
     # model.prune_weights(amount=0.2)
-    model.predict()
+    # model.predict()
     model.print_summary(print_cm=True)
     # model.confusion_matrix()
-    model.save_model(3)
+    # model.save_model(3)
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')

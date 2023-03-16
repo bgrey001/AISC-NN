@@ -1,33 +1,88 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 28 19:18:57 2022
+Created on Thu Mar 16 10:22:49 2023
 @author: Benedict Grey
 
-One dimensional convolutional neural network with residual blocks PyTorch implementation (CNN_1D_v1)
+DISCLAIMER:
+Script for the implementation of Shukla and Marlin's mTAN encoder classification network
+All credit goes to the original authors, this is merely an modification of the original code
+https://github.com/reml-lab/mTAN
+
+mTAN CNN
 
 """
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.nn.utils.prune as prune
-
+# =============================================================================
+# dependencies
+# =============================================================================
 from pycm import ConfusionMatrix
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 from scipy.interpolate import make_interp_spline
-from torch.utils.data import DataLoader
 from datetime import datetime
+import math
 
 import AIS_loader as data_module
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+import torch.nn.utils.prune as prune
+
 sns.set_style("darkgrid") 
 
+# =============================================================================
+# mTAN module
+# =============================================================================
+class multiTimeAttention(nn.Module):
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    
+    def __init__(self, input_dim, nhidden, embed_time, num_heads=1):
+        super(multiTimeAttention, self).__init__()
+        assert embed_time % num_heads == 0
+        self.embed_time = embed_time
+        self.embed_time_k = embed_time // num_heads
+        self.h = num_heads
+        self.dim = input_dim
+        self.nhidden = nhidden
+        self.linears = nn.ModuleList([nn.Linear(embed_time, embed_time), 
+                                      nn.Linear(embed_time, embed_time),
+                                      nn.Linear(input_dim*num_heads, nhidden)])
+        
+    def attention(self, query, key, value, mask=None, dropout=None):
+        "Compute 'Scaled Dot Product Attention'"
+        torch.cuda.empty_cache()
+        dim = value.size(-1)
+        d_k = query.size(-1)
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+        scores = scores.unsqueeze(-1).repeat_interleave(dim, dim=-1)
+        if mask is not None:
+            scores = scores.masked_fill(mask.unsqueeze(-3) == 0, -1e9)
+        p_attn = F.softmax(scores, dim = -2).to(self.device)
+        if dropout is not None:
+            p_attn = dropout(p_attn)
+        return torch.sum(p_attn*value.unsqueeze(-3).to(self.device), -2), p_attn.to(self.device)
+    
+    
+    def forward(self, query, key, value, mask=None, dropout=None):
+        "Compute 'Scaled Dot Product Attention'"
+        batch, seq_len, dim = value.size()
+        if mask is not None:
+            # Same mask applied to all h heads.
+            mask = mask.unsqueeze(1)
+        value = value.unsqueeze(1)
+        query, key = [l(x).view(x.size(0), -1, self.h, self.embed_time_k).transpose(1, 2)
+                      for l, x in zip(self.linears, (query, key))]
+        x, _ = self.attention(query, key, value, mask, dropout)
+        x = x.transpose(1, 2).contiguous().view(batch, -1, self.h * dim)
+        return self.linears[-1](x)
 
 # =============================================================================
 # custom Residual block
@@ -75,7 +130,6 @@ class CNN_1D(nn.Module):
         super(CNN_1D, self).__init__()
         # calculate channel sizes for the different convolution layers
         conv_l2 = 2 * conv_l1
-        conv_l3 = conv_l2
         
         self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_l1, kernel_size=kernel_size)
         self.batch_norm_1 = nn.BatchNorm1d(conv_l1)
@@ -105,7 +159,6 @@ class CNN_1D(nn.Module):
         self.fc_3 = nn.Linear(64, n_classes)
         
 
-
     # =============================================================================
     # forward propagation method
     # =============================================================================
@@ -130,10 +183,94 @@ class CNN_1D(nn.Module):
         
         return input_x
 
+        
+        
 # =============================================================================
-# wrapper class for an instance of the CNN_1D model
+# full mTAN classification network
 # =============================================================================
-class CNN_1D_wrapper():
+class mTAN_enc(nn.Module):
+ 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")   
+ 
+    # =============================================================================
+    # constructor
+    # =============================================================================
+    def __init__(self, input_dim, n_gru_layers, nhidden, embed_time, num_heads=1, learn_emb=True, freq=10., bidirectional=True, n_classes=6):
+        super(mTAN_enc, self).__init__()
+        
+        bi_dim = 1
+        if bidirectional: bi_dim = 2
+        self.bi_dim = bi_dim
+        self.n_classes = n_classes
+        
+        self.freq = freq
+        self.embed_time = embed_time
+        self.learn_emb = learn_emb
+        self.dim = input_dim
+        self.nhidden = nhidden
+        self.att = multiTimeAttention(input_dim, nhidden, embed_time, num_heads)
+        # self.GRU = nn.GRU(nhidden, nhidden, bidirectional=bidirectional, num_layers=n_gru_layers, batch_first=True)
+        self.resnet = CNN_1D(n_features=nhidden, n_classes=6, seq_length=2931, conv_l1=nhidden, kernel_size=3, pool_size=2)
+        
+        
+        if learn_emb:
+            self.periodic = nn.Linear(1, embed_time-1)
+            self.linear = nn.Linear(1, 1)
+            
+        # self.classifier = nn.Sequential(
+        #     nn.Linear(self.bi_dim, 128), 
+        #     nn.Linear(128, 64),
+        #     nn.Linear(64, self.n_classes))
+            
+
+    # =============================================================================
+    # method that learns the time embeddings as weights
+    # =============================================================================
+    def learn_time_embedding(self, tt):
+        tt = tt.to(self.device)
+        tt = tt.unsqueeze(-1)
+        out2 = torch.sin(self.periodic(tt))
+        out1 = self.linear(tt)
+        return torch.cat([out1, out2], -1)
+       
+    # =============================================================================
+    # method that generates positional encodings to provide sequential semantics for the model
+    # =============================================================================
+    def time_embedding(self, pos, d_model):
+        pe = torch.zeros(pos.shape[0], pos.shape[1], d_model)
+        position = 48.*pos.unsqueeze(2)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * -(np.log(self.freq) / d_model))
+        pe[:, :, 0::2] = torch.sin(position * div_term)
+        pe[:, :, 1::2] = torch.cos(position * div_term)
+        return pe
+    
+       
+    def forward(self, x, time_steps):
+        time_steps = time_steps.to(self.device)
+        mask = x[:, :, self.dim:]
+        mask = torch.cat((mask, mask), 2)
+        if self.learn_emb:
+            key = self.learn_time_embedding(time_steps).to(self.device) 
+        else:
+            key = self.time_embedding(time_steps, self.embed_time).to(self.device)
+        att_out = self.att(query=key, key=key, value=x, mask=None) # key and value are both the embeddings and the value is the feature vector
+        
+        # print(att_out.shape)
+        resnet_in = torch.transpose(input=att_out, dim0=1, dim1=2)
+        # print(resnet_in.shape)
+        # cnn expects shape (batch, n_features, seq_length)
+        # we have shape (batch, seq_length, features)
+        
+        out = self.resnet(resnet_in)
+        # class_in = torch.cat((gru_out[:, -1, :self.nhidden], gru_out[:, 0, self.nhidden:]), dim=1)        
+        # out = self.classifier(class_in)
+        return out
+    
+    
+# =============================================================================
+# wrapper class for an instance of the mTAN_RNN model
+# =============================================================================
+class mTAN_wrapper():
     # =============================================================================
     # Class attributes
     # =============================================================================
@@ -141,28 +278,24 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    data_ver = '3'
+    data_ver = '1'
     shuffle = True
     # =============================================================================
     # Hyperparameters
     # =============================================================================
-    conv_l1 = 64
-    kernel_size = 3
-    pool_size = 2
     eta = 3e-4
-    alpha = 1e-5
+    alpha = 1e-4
     optim_name = ''
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    def __init__(self, CNN_1D, dataset, optimizer, batch_size, combine=False):
+    # =============================================================================
+    # constructor method
+    # =============================================================================
+    def __init__(self, mTAN, dataset, n_gru_units, hidden_dim, embed_time, optimizer, bidirectional, batch_size, combine=False):
         
         # init class members
         self.dataset = dataset
-        self.datatype = dataset
-        self.batch_size = batch_size
         self.version_number = 0
-
+        self.batch_size = batch_size
+        
         self.history = {'training_accuracy': [], 
                         'training_loss': [], 
                         'validation_accuracy': [], 
@@ -180,89 +313,76 @@ class CNN_1D_wrapper():
         self.class_accuracies = None
         self.epochs = len(self.history['training_accuracy'])
 
-        
-        
         # init dataset class objects
-        if combine:
-            self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver, split_2='valid')
+        if combine: self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver, split_2='valid')
         else:
             self.train_data = data_module.AIS_loader(choice=self.dataset, split='train', version=self.data_ver)
             self.valid_data = data_module.AIS_loader(choice=self.dataset, split='valid', version=self.data_ver)
-            
         self.test_data = data_module.AIS_loader(choice=self.dataset, split='test', version=self.data_ver)
-        self.n_features = self.train_data.n_features
+        
+        self.n_features = 4
         self.n_classes = self.train_data.n_classes
         self.seq_length = self.train_data.seq_length
 
-        self.model = CNN_1D(n_features=self.n_features, n_classes=self.n_classes, seq_length=self.seq_length, conv_l1=self.conv_l1,  kernel_size=self.kernel_size, pool_size=self.pool_size).to(self.device)
+        self.model = mTAN_enc(input_dim=self.n_features, 
+                         nhidden=hidden_dim, 
+                         n_gru_layers=n_gru_units, 
+                         n_classes=self.n_classes, 
+                         bidirectional=bidirectional,
+                         embed_time=embed_time, 
+                         num_heads=1, 
+                         learn_emb=True, 
+                         freq=10.).to(self.device)
 
         match optimizer:
-            case 'AdamW':
-                self.optimizer = optim.AdamW(self.model.parameters(), lr=self.eta, weight_decay=self.alpha)
-            case 'SGD':
-                self.optimizer = optim.SGD(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
-            case 'RMSprop':
-                self.optimizer = optim.RMSprop(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
+            case 'AdamW': self.optimizer = optim.AdamW(self.model.parameters(), lr=self.eta, weight_decay=self.alpha)
+            case 'SGD': self.optimizer = optim.SGD(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
+            case 'RMSprop': self.optimizer = optim.RMSprop(self.model.parameters(), lr=self.eta, weight_decay=self.weight_decay, momentum=self.alpha)
 
         self.optim_name = optimizer
         self.criterion = nn.CrossEntropyLoss()
 
-    
     def class_from_output(self, output, is_tensor):
-        # print(output)
-        if is_tensor:
-            # print(output)
-            class_index = torch.argmax(output).item()
-        else:
-            class_index = int(output)
+        if is_tensor: class_index = torch.argmax(output).item()
+        else: class_index = int(output)
         return self.data_loader.return_classes()[class_index]
 
     # =============================================================================
     # Train model
     # =============================================================================
-
-    def fit(self, validate, epochs):
-
-        
+    def fit(self, validate, epochs=None):
+        if epochs == None: epochs = self.epochs
+        else: self.epochs = epochs
         train_print_steps = 200
         val_print_steps = plot_steps = 20
         train_loss = valid_loss = 0
 
         # instantiate DataLoader
-        train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.CNN_collate)
-        # train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle)
-        if validate:
-            valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.CNN_collate)
-            # valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle)
+        train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.GRU_collate, drop_last=True)
+        if validate: valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
 
         for epoch in range(epochs):
-            start_time = datetime.now()  
+            start_time = datetime.now()   
             aggregate_correct = 0
             v_correct = 0
             train_loss_counter = 0
             valid_loss_counter = 0
-
             # =============================================================================
             # training loop
             # =============================================================================
-            index = 0
-            for features, labels, lengths in train_generator:
-                # with torch.no_grad():
-                # self.model.eval()
+            for index, (seqs, time_steps, labels, lengths) in enumerate(train_generator):
+                seqs, time_steps, labels = seqs.to(self.device), time_steps.to(self.device), labels.to(self.device)
                 self.model.train()
-                features, labels = features.to(self.device), labels.to(self.device) # transfer to GPU
-                # forward propagation
-                output = self.model(features)
-                # backpropagation
+                out = self.model(seqs, time_steps)
+                loss = self.criterion(out, labels)
                 self.optimizer.zero_grad()
-                loss = self.criterion(output, labels)
                 loss.backward()
                 self.optimizer.step()
-                outputs = torch.argmax(output, dim=1)
+                outputs = torch.argmax(out, dim=1)
                 aggregate_correct += (((outputs == labels).sum().item()) / len(labels)) * 100
             
                 if index == 0 and epoch == 0:
-                    first_accuracy = (100 * (aggregate_correct / len(labels)))
+                    first_accuracy = aggregate_correct
                     print(f'Initial accuracy = {first_accuracy}')
                     
                 if (index + 1) % plot_steps == 0:
@@ -271,8 +391,6 @@ class CNN_1D_wrapper():
                     train_loss_counter += 1
                     train_loss += loss.item()
                             
-                index += 1
-                
             train_accuracy = aggregate_correct / (len(train_generator))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
@@ -288,16 +406,18 @@ class CNN_1D_wrapper():
             # =============================================================================
             if validate:
                 v_index = 0
-                for valid_features, valid_labels, lengths in valid_generator:
+                for valid_seqs, valid_time_steps, valid_labels, lengths in valid_generator:
+                    
                     self.model.eval()
-                    valid_features, valid_labels = valid_features.to(self.device), valid_labels.to(self.device)
+                    valid_seqs, valid_labels = valid_seqs.to(self.device), valid_labels.to(self.device)
                     with torch.no_grad():
                         # forward propagataion
-                        valid_output = self.model(valid_features)
+                        valid_output = self.model(valid_seqs, valid_time_steps)
                         # calculate loss and valid_loss
                         v_loss = self.criterion(valid_output, valid_labels)
                         valid_outputs = torch.argmax(valid_output, dim=1)
                         v_correct += ((valid_outputs == valid_labels).sum().item() / len(valid_labels)) * 100
+
                         if (v_index + 1) % plot_steps == 0:
                             if (v_index + 1) % val_print_steps == 0:
                                 print(f'Epoch {epoch}, validation batch number: {v_index + 1}, validation loss = {v_loss}')
@@ -305,7 +425,6 @@ class CNN_1D_wrapper():
                             valid_loss += v_loss.item()
                             
                     v_index += 1
-                    
                 val_accuracy = v_correct / (len(valid_generator))
                 self.validation_accuracies.append(val_accuracy)
                 self.validation_losses.append(valid_loss/valid_loss_counter)
@@ -315,13 +434,11 @@ class CNN_1D_wrapper():
 
                 valid_loss = 0
                 valid_loss_counter = 0
-            else:
-                self.predict()
-                
+            else: self.predict()
             self.confusion_matrix(valid=validate)
             print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
             end_time = datetime.now()
-            print(f'Epoch duration: {(end_time - start_time)}')
+            print(f'Epoch duration: {(end_time - start_time)}\n')
 
         # history
         self.history['training_accuracy'] += self.training_accuracies
@@ -329,53 +446,39 @@ class CNN_1D_wrapper():
         self.history['validation_accuracy'] += self.validation_accuracies
         self.history['validation_loss'] += self.validation_losses
 
+
     # =============================================================================
     # method that tests model on test data
     # =============================================================================
-
     def predict(self):
-
         test_correct = test_loss_counter = test_loss = 0
-        test_print_steps = 20
-        
-        # for varying padded data
-        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.CNN_collate)
+        test_print_steps = 200
+        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
         test_index = 0
-        
-        for test_features, test_labels, lengths in test_generator:
+        for test_seqs, test_time_steps, test_labels, lengths in test_generator:
             self.model.eval()
             with torch.no_grad():
-                test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
-                test_output = self.model(test_features)
-                
-                # calculate loss and valid_loss
+                test_seqs, test_time_steps, test_labels = test_seqs.to(self.device), test_time_steps.to(self.device), test_labels.to(self.device)
+                test_output = self.model(test_seqs, test_time_steps)
                 t_loss = self.criterion(test_output, test_labels)
                 test_outputs = torch.argmax(test_output, dim=1)
-                # test_outputs = torch.zeros(test_labels.size()[0]).int().to(self.device)
                 test_correct += ((test_outputs == test_labels).sum().item() / len(test_labels)) * 100 
-            
                 if (test_index + 1) % (test_print_steps) == 0:
                     print(f'test batch number: {test_index + 1}, test loss = {t_loss}')
                     test_loss_counter += 1
                     test_loss += t_loss.item()
             test_index += 1
-
         test_accuracy = test_correct / (len(test_generator))
         self.test_losses.append(test_loss/test_loss_counter)
         self.test_accuracies.append(test_accuracy)
         print("========================================================================================================================================================== \n" +
               f" ------------------> test accuracy = {test_accuracy}, average test loss = {test_loss / test_loss_counter} <------------------" +
               "========================================================================================================================================================== \n")
-
         test_loss = 0
         test_loss_counter = 0
-
-        # history
         self.history['test_accuracy'] += self.test_accuracies
         self.history['test_loss'] += self.test_losses
-
-
-
+  
     # =============================================================================
     # method to build confusion matrix
     # =============================================================================
@@ -386,16 +489,15 @@ class CNN_1D_wrapper():
         n_correct = 0
         
         class_list = ['drifting_longlines', 'fixed_gear', 'pole_and_line', 'purse_seines', 'trawlers', 'trollers'] # just for visual reference
-        if valid:
-            test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.CNN_collate)
-        else:
-            test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.CNN_collate)
-            
-        with torch.no_grad():
+        if valid: test_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+        else: test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+
+        for test_seqs, test_time_steps, test_labels, lengths in test_generator:
+
             self.model.eval()
-            for test_features, test_labels, lengths in test_generator:
-                test_features, test_labels = test_features.to(self.device), test_labels.to(self.device)
-                test_output = self.model(test_features)
+            with torch.no_grad():
+                test_seqs, test_time_steps, test_labels = test_seqs.to(self.device), test_time_steps.to(self.device), test_labels.to(self.device)
+                test_output = self.model(test_seqs, test_time_steps)
                 preds = torch.argmax(test_output, dim=1)
 
                 # confmat variables
@@ -416,8 +518,8 @@ class CNN_1D_wrapper():
         
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
-            plt.savefig(f'../../plots/CNN_1D/ResBlock_v{self.version_number}/confmat_CNN_1D_v{self.version_number}.png', dpi=300)
-        
+            plt.savefig(f'mTAN_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/mTAN/v{self.version_number}/confmat_mTAN_v{self.version_number}.png', dpi=300)
         
         self.history['confusion_matrix'] = confmat
         self.history['class_precisions'] = confmat.class_stat['PPV']
@@ -425,31 +527,16 @@ class CNN_1D_wrapper():
         self.history['class_F1_scores'] = confmat.class_stat['F1']
         self.history['class_supports'] = confmat.class_stat['P']
         
-        
-        
+
+    # =============================================================================
+    # methdo to prune (probably low magnitude) weights to improve generalisation
+    # =============================================================================
     def prune_weights(self, amount):
         parameters_to_prune = (
-            (self.model.conv_1, 'weight'),
-            (self.model.batch_norm_1, 'weight'),
-            
-            (self.model.res_block_1.conv_1, 'weight'),
-            (self.model.res_block_1.batch_norm_1, 'weight'),
-            (self.model.res_block_1.conv_2, 'weight'),
-            (self.model.res_block_1.batch_norm_2, 'weight'),
-            
-            (self.model.res_block_2.conv_1, 'weight'),
-            (self.model.res_block_2.batch_norm_1, 'weight'),
-            (self.model.res_block_2.conv_2, 'weight'),
-            (self.model.res_block_2.batch_norm_2, 'weight'),
-            
-            (self.model.conv_2, 'weight'),
-            (self.model.batch_norm_2, 'weight'),
-
             (self.model.fc_1, 'weight'),
             (self.model.fc_2, 'weight'),
             (self.model.fc_3, 'weight'),
         )
-
 
         prune.global_unstructured(
             parameters_to_prune,
@@ -470,14 +557,9 @@ class CNN_1D_wrapper():
     # =============================================================================
     def save_model(self, version_number, init=False):
         self.version_number = version_number
-        if init:
-            torch.save(self.model.state_dict(), f'saved_models/init_param_models/CNN_1D_v{version_number}.pt')
-        elif self.dataset == 'varying':
-            torch.save(self.model.state_dict(), f'saved_models/zero_padded/CNN_1D_v{version_number}.pt')
-        elif self.dataset == 'linear_interp':
-            torch.save(self.model.state_dict(), f'saved_models/linear_interp/CNN_1D_v{version_number}.pt')
-            
-        print(f'CNN_1D_v{version_number} state_dict successfully saved')
+        if init: torch.save(self.model.state_dict(), f'saved_models/init_param_models/mTANCNN_v{version_number}.pt')
+        else: torch.save(self.model.state_dict(), f'saved_models/non_linear/mTANCNN_v{version_number}.pt') 
+        print(f'mTANCNN_v{version_number} state_dict successfully saved')
         self.save_history(version_number, init)
 
     # =============================================================================
@@ -485,14 +567,9 @@ class CNN_1D_wrapper():
     # =============================================================================
     def load_model(self, version_number, init=False):
         self.version_number = version_number
-        if init:
-            self.model.load_state_dict(torch.load(f'saved_models/init_param_models/CNN_1D_v{version_number}.pt'))
-        elif self.dataset == 'varying':
-            self.model.load_state_dict(torch.load(f'saved_models/zero_padded/CNN_1D_v{version_number}.pt'))
-        elif self.dataset == 'linear_interp':
-            self.model.load_state_dict(torch.load(f'saved_models/linear_interp/CNN_1D_v{version_number}.pt'))
-            
-        print(f'CNN_1D_v{version_number} state dictionary successfully loaded')
+        if init: self.model.load_state_dict(torch.load(f'saved_models/init_param_models/mTANCNN_v{version_number}.pt'))
+        else: self.model.load_state_dict(torch.load(f'saved_models/non_linear/mTANCNN_v{version_number}.pt'))
+        print(f'mTANCNN_v{version_number} state dictionary successfully loaded')
         self.load_history(version_number, init)
 
     # =============================================================================
@@ -517,33 +594,25 @@ class CNN_1D_wrapper():
     # =============================================================================
     def save_history(self, version_number, init=False):
         if init:
-            with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
+            with open(f'saved_models/history/init_histories/mTANCNN_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
-        elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
+        else:
+            with open(f'saved_models/history/non_linear/mTANCNN_v{version_number}_history.pkl', 'wb') as f:
                 pickle.dump(self.history, f)
-        elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-                
-        print(f'CNN_1D_v{version_number} history saved')
+        print(f'mTANCNN_v{version_number} history saved')
 
     # =============================================================================
     # method that saves history to a pkl file
     # =============================================================================
     def load_history(self, version_number, init=False):
         if init:
-            with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
+            with open(f'saved_models/history/init_histories/mTANCNN_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
-        elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
+        else:
+            with open(f'saved_models/history/non_linear/mTANCNN_v{version_number}_history.pkl', 'rb') as f:
                 self.history = pickle.load(f)
-        elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-                
         self.epochs = len(self.history['training_accuracy'])
-        print(f'CNN_1D_v{version_number} history loaded')
+        print(f'mTANCNN_v{version_number} history loaded')
 
     # =============================================================================
     # plot given metric
@@ -556,10 +625,12 @@ class CNN_1D_wrapper():
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
-                plt.plot(x_, y_)
+                plt.grid(True)
+                plt.plot(x_, y_, label='Training accuracy')
                 plt.title('Training accuracy')
                 plt.xlabel('epochs')
                 plt.ylabel('accuracy %')
+                plt.legend()
                 plt.show()
             case 'training_loss':
                 y = np.array(self.history['training_loss'])
@@ -567,10 +638,12 @@ class CNN_1D_wrapper():
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
+                plt.grid(True)
                 plt.plot(x_, y_)
                 plt.title('Training loss')
                 plt.xlabel('epochs')
                 plt.ylabel('loss')
+                plt.legend()
                 plt.show()
             case 'validation_accuracy':
                 y = np.array(self.history['validation_accuracy'])
@@ -578,10 +651,12 @@ class CNN_1D_wrapper():
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
+                plt.grid(True)
                 plt.plot(x_, y_)
                 plt.title('Validation accuracy')
                 plt.xlabel('epochs')
                 plt.ylabel('accuracy %')
+                plt.legend()
                 plt.show()
             case 'validation_loss':
                 y = np.array(self.history['validation_loss'])
@@ -589,10 +664,12 @@ class CNN_1D_wrapper():
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
+                plt.grid(True)
                 plt.plot(x_, y_)
                 plt.title('Validation loss')
                 plt.xlabel('epochs')
                 plt.ylabel('loss')
+                plt.legend()
                 plt.show()
             case 'test_accuracy':
                 y = np.array(self.history['test_accuracy'])
@@ -600,10 +677,12 @@ class CNN_1D_wrapper():
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
+                plt.grid(True)
                 plt.plot(x_, y_)
                 plt.title('Test accuracy')
                 plt.xlabel('epochs')
                 plt.ylabel('accuracy %')
+                plt.legend()
                 plt.show()
             case 'test_loss':
                 y = np.array(self.history['test_loss'])
@@ -611,10 +690,12 @@ class CNN_1D_wrapper():
                 spline = make_interp_spline(x, y)
                 x_ = np.linspace(x.min(), x.max(), 500)
                 y_ = spline(x_)
+                plt.grid(True)
                 plt.plot(x_, y_)
                 plt.title('Test loss')
                 plt.xlabel('epochs')
                 plt.ylabel('loss')
+                plt.legend()
                 plt.show()
             case 'accuracy':
                 y = np.array(self.history['training_accuracy'])
@@ -630,7 +711,6 @@ class CNN_1D_wrapper():
                 plt.grid(True)
                 plt.plot(x_, y_, c='green', label='Training accuracy')
                 plt.plot(x_, y_2_, c='orange', label='Validation accuracy')
-                # plt.title('Accuracy')
                 plt.xlabel('epochs')
                 plt.ylabel('accuracy %')
                 plt.legend()
@@ -649,12 +729,11 @@ class CNN_1D_wrapper():
                 plt.grid(True)
                 plt.plot(x_, y_, c='green', label='Training loss')
                 plt.plot(x_, y_2_, c='orange', label='Validation loss')
-                # plt.title('Loss')
                 plt.xlabel('epochs')
                 plt.ylabel('loss')
                 plt.legend()
                 plt.show()
-                
+            
                 
     # =============================================================================
     # plot given metric
@@ -662,7 +741,7 @@ class CNN_1D_wrapper():
 
     def print_summary(self, print_cm=False):
         self.confusion_matrix()
-        print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
+        print(f'\nModel: mTANCNN_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
               f'\nData: {self.dataset}, v{self.data_ver} \nSequence length = {self.seq_length} \nBatch size = {self.batch_size} \nShuffled = {self.shuffle}'
@@ -681,8 +760,7 @@ class CNN_1D_wrapper():
               f'=====================================================================================================================\n'
               f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |\n'
               f'=====================================================================================================================\n\n')
-        if print_cm:
-            self.confusion_matrix(print_confmat=(True))
+        if print_cm: self.confusion_matrix(print_confmat=(True))
 
 
 # =============================================================================
@@ -691,12 +769,18 @@ class CNN_1D_wrapper():
 def nonrandom_init(K, dataset):
     print(f'Beginning random initalisation with {K} different models')
     records = {'index': None, 'highest_accuracy': 0}
-    # models = []
     for k in range(K):
-        model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
+        model = mTAN_wrapper(mTAN_enc, 
+                            dataset=dataset, 
+                            n_gru_units=2, 
+                            embed_time=256,
+                            hidden_dim=64,
+                            optimizer='AdamW', 
+                            bidirectional=True, 
+                            batch_size=10, 
+                            combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
-        model.fit(validate=True, epochs=3)
-        # print(models[k].history['validation_accuracy'])
+        model.fit(validate=True, epochs=2)
         if max(model.history['validation_accuracy']) > records['highest_accuracy']:
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
@@ -705,58 +789,67 @@ def nonrandom_init(K, dataset):
         del model
         
     # save highest index 
-    with open('saved_models/history/init_histories/CNN_1D_highest_idx.pkl', 'wb') as f:
+    with open('saved_models/history/init_histories/mTANCNN_highest_idx.pkl', 'wb') as f:
         pickle.dump(records['index'], f)
         print(f"Highest_idx = {records['index']}, saved successfully")
+    
 
     
 # =============================================================================
 # load the parameters of the model with the highest validation accuracy
 # =============================================================================
 def load_highest_model(model):
-    with open('saved_models/history/init_histories/CNN_1D_highest_idx.pkl', 'rb') as f:
+    with open('saved_models/history/init_histories/mTANCNN_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
     model.load_model(highest_idx, init=True)
     
-
+    
 # =============================================================================
 # driver code
 # =============================================================================
 def main():
-    # load the best randomly initialised network parameters for further training
-    nonrand = False
-    # current_dataset = 'linear_interp'
-    current_dataset = 'varying'
+    nonrand = True
+    current_dataset = 'non_linear'
     
-    if nonrand:
-        nonrandom_init(K=20, dataset=current_dataset)
+    if nonrand: nonrandom_init(K=10, dataset=current_dataset)
         
-    model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=128, combine=False)
-    # load_highest_model(model)
+    model = mTAN_wrapper(mTAN_enc, 
+                        dataset=current_dataset, 
+                        n_gru_units=2, 
+                        embed_time=256,
+                        hidden_dim=64,
+                        optimizer='AdamW', 
+                        bidirectional=True, 
+                        batch_size=10, 
+                        combine=False)
+    
+    load_highest_model(model)
     
     # =============================================================================
     # testing zone
     # =============================================================================
-    # model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
-    # model.load_model(2)
-    model.fit(validate=True, epochs=1)
-    # model.prune_weights(amount=0.21)
-    model.predict()
-    # model.print_params()
-    model.print_summary(print_cm=(True))
-    # model.save_model(2)
-    
+    # model.load_model(1)
+    # model.fit(validate=True, epochs=20)
+    # model.prune_weights(amount=0.2)
+    # model.predict()
+    model.print_summary(print_cm=True)
+    # model.confusion_matrix()
+    model.save_model(11)
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')
     # model.plot('training_loss')
     # model.plot('validation_loss')
+    # model.plot('accuracy')
+    # model.plot('loss')
     
-    model.plot('accuracy')
-    model.plot('loss')
     
-    
-if __name__ == "__main__":        
-    main()
+if __name__ == "__main__":
+    main()        
+
+
+
+
+
 
