@@ -17,6 +17,7 @@ import warnings
 from pandas.core.common import SettingWithCopyWarning
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
 from datetime import timedelta
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning) # ignore warning for creating views instead of copies
 

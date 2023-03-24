@@ -59,16 +59,22 @@ class multiTimeAttention(nn.Module):
         torch.cuda.empty_cache()
         dim = value.size(-1)
         d_k = query.size(-1)
+        # scores = keys * queries
         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
         scores = scores.unsqueeze(-1).repeat_interleave(dim, dim=-1)
         if mask is not None:
             scores = scores.masked_fill(mask.unsqueeze(-3) == 0, -1e9)
+        # probabilities, aka the scores softmaxed
         p_attn = F.softmax(scores, dim = -2).to(self.device)
         if dropout is not None:
             p_attn = dropout(p_attn)
+        # probabilities * values, this is the sum of the weighted averages
         return torch.sum(p_attn*value.unsqueeze(-3).to(self.device), -2), p_attn.to(self.device)
     
     
+    """
+    mTAN(t, s)
+    """
     def forward(self, query, key, value, mask=None, dropout=None):
         "Compute 'Scaled Dot Product Attention'"
         batch, seq_len, dim = value.size()
@@ -76,6 +82,7 @@ class multiTimeAttention(nn.Module):
             # Same mask applied to all h heads.
             mask = mask.unsqueeze(1)
         value = value.unsqueeze(1)
+        # 
         query, key = [l(x).view(x.size(0), -1, self.h, self.embed_time_k).transpose(1, 2)
                       for l, x in zip(self.linears, (query, key))]
         x, _ = self.attention(query, key, value, mask, dropout)
@@ -93,14 +100,14 @@ class mTAN_enc(nn.Module):
     # =============================================================================
     # constructor
     # =============================================================================
-    def __init__(self, input_dim, n_gru_layers, nhidden, embed_time, num_heads=1, learn_emb=True, freq=10., bidirectional=True, n_classes=6):
+    def __init__(self, input_dim, query, n_gru_layers, nhidden, embed_time, num_heads=1, learn_emb=True, freq=10., bidirectional=True, n_classes=6):
         super(mTAN_enc, self).__init__()
         
         bi_dim = 1
         if bidirectional: bi_dim = 2
         self.bi_dim = bi_dim
         self.n_classes = n_classes
-        
+        self.query = query
         self.freq = freq
         self.embed_time = embed_time
         self.learn_emb = learn_emb
@@ -147,9 +154,11 @@ class mTAN_enc(nn.Module):
         mask = torch.cat((mask, mask), 2)
         if self.learn_emb:
             key = self.learn_time_embedding(time_steps).to(self.device) 
+            query = self.learn_time_embedding(self.query.unsqueeze(0)).to(self.device)
         else:
             key = self.time_embedding(time_steps, self.embed_time).to(self.device)
-        att_out = self.att(query=key, key=key, value=x, mask=None) # key and value are both the embeddings and the value is the feature vector
+            query = self.fixed_time_embedding(self.query.unsqueeze(0)).to(self.device)
+        att_out = self.att(query=query, key=key, value=x, mask=None) # key and value are both the embeddings and the value is the feature vector
         gru_out, hidden = self.GRU(att_out)
         class_in = torch.cat((gru_out[:, -1, :self.nhidden], gru_out[:, 0, self.nhidden:]), dim=1)        
         out = self.classifier(class_in)
@@ -178,20 +187,20 @@ class mTAN_wrapper():
     # =============================================================================
     # constructor method
     # =============================================================================
-    def __init__(self, mTAN, dataset, n_gru_units, hidden_dim, embed_time, optimizer, bidirectional, batch_size, combine=False):
+    def __init__(self, mTAN, version_number, query, dataset, n_gru_units, hidden_dim, embed_time, optimizer, bidirectional, batch_size, combine=False):
         
         # init class members
         self.dataset = dataset
-        self.version_number = 0
+        self.version_number = version_number
         self.batch_size = batch_size
-        
+        self.query = query
+        self.min_val_loss = np.inf
         self.history = {'training_accuracy': [], 
                         'training_loss': [], 
                         'validation_accuracy': [], 
                         'validation_loss': [], 
                         'test_accuracy': [], 
                         'test_loss': [],
-                        
                         'confusion_matrix': None,
                         'class_precisions': None,
                         'class_recalls': None,
@@ -214,6 +223,7 @@ class mTAN_wrapper():
         self.seq_length = self.train_data.seq_length
 
         self.model = mTAN_enc(input_dim=self.n_features, 
+                         query=self.query,
                          nhidden=hidden_dim, 
                          n_gru_layers=n_gru_units, 
                          n_classes=self.n_classes, 
@@ -242,8 +252,9 @@ class mTAN_wrapper():
     def fit(self, validate, epochs=None):
         if epochs == None: epochs = self.epochs
         else: self.epochs = epochs
-        train_print_steps = 200
-        val_print_steps = plot_steps = 20
+        avg_val_loss = np.inf
+        train_print_steps = 600
+        val_print_steps = plot_steps = 400
         train_loss = valid_loss = 0
 
         # instantiate DataLoader
@@ -277,12 +288,14 @@ class mTAN_wrapper():
                 if (index + 1) % plot_steps == 0:
                     if (index + 1) % train_print_steps == 0:
                         print(f'Epoch {epoch}, batch number: {index + 1}, training loss = {loss}')
-                    train_loss_counter += 1
-                    train_loss += loss.item()
+                train_loss_counter += 1
+                train_loss += loss.item()
                             
             train_accuracy = aggregate_correct / (len(train_generator))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
+            self.history['training_accuracy'].append(self.training_accuracies)
+            self.history['training_loss'].append(self.training_losses)
             print("========================================================================================================================================================== \n" +
                   f"------------------> training accuracy = {train_accuracy}, average training loss = {train_loss / train_loss_counter} <------------------\n" +
                   "========================================================================================================================================================== \n")
@@ -310,17 +323,26 @@ class mTAN_wrapper():
                         if (v_index + 1) % plot_steps == 0:
                             if (v_index + 1) % val_print_steps == 0:
                                 print(f'Epoch {epoch}, validation batch number: {v_index + 1}, validation loss = {v_loss}')
-                            valid_loss_counter += 1
-                            valid_loss += v_loss.item()
+                        valid_loss_counter += 1
+                        valid_loss += v_loss.item()
                             
                     v_index += 1
                 val_accuracy = v_correct / (len(valid_generator))
+                avg_val_loss = valid_loss / valid_loss_counter
                 self.validation_accuracies.append(val_accuracy)
-                self.validation_losses.append(valid_loss/valid_loss_counter)
+                self.validation_losses.append(avg_val_loss)
+                self.history['validation_accuracy'].append(self.validation_accuracies)
+                self.history['validation_loss'].append(self.validation_losses)
                 print("========================================================================================================================================================== \n" +
                       f" ------------------> validation accuracy = {val_accuracy}, average validation loss = {valid_loss / valid_loss_counter} <------------------" +
                       "========================================================================================================================================================== \n")
 
+                # model checkpoints or callbacks
+                if avg_val_loss < self.min_val_loss:
+                    self.min_val_loss = avg_val_loss
+                    print(f'CHECKPOINT: new minimum val loss {self.min_val_loss}, checkpoint created.\n')
+                    self.checkpoint()
+                                    
                 valid_loss = 0
                 valid_loss_counter = 0
             else: self.predict()
@@ -329,11 +351,6 @@ class mTAN_wrapper():
             end_time = datetime.now()
             print(f'Epoch duration: {(end_time - start_time)}\n')
 
-        # history
-        self.history['training_accuracy'] += self.training_accuracies
-        self.history['training_loss'] += self.training_losses
-        self.history['validation_accuracy'] += self.validation_accuracies
-        self.history['validation_loss'] += self.validation_losses
 
 
     # =============================================================================
@@ -341,7 +358,7 @@ class mTAN_wrapper():
     # =============================================================================
     def predict(self):
         test_correct = test_loss_counter = test_loss = 0
-        test_print_steps = 200
+        test_print_steps = 400
         test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
         test_index = 0
         for test_seqs, test_time_steps, test_labels, lengths in test_generator:
@@ -441,25 +458,87 @@ class mTAN_wrapper():
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         
 
+        
+    # =============================================================================
+    # method to save the model and its history if it's produced the best results so far
+    # =============================================================================
+    def checkpoint(self):
+        self.save_model(version_number=self.version_number, condition='checkpoint')
+        
+        
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
-    def save_model(self, version_number, init=False):
+    def save_model(self, version_number, condition):
         self.version_number = version_number
-        if init: torch.save(self.model.state_dict(), f'saved_models/init_param_models/mTAN_v{version_number}.pt')
-        else: torch.save(self.model.state_dict(), f'saved_models/non_linear/mTAN_v{version_number}.pt') 
-        print(f'mTAN_v{version_number} state_dict successfully saved')
-        self.save_history(version_number, init)
+        match condition:
+            case 'init':
+                torch.save(self.model.state_dict(), f'saved_models/init_param_models/mTANGRU_v{version_number}.pt')
+                print(f'mTANGRU_v{version_number} state_dict successfully saved')
+            case 'checkpoint':
+                torch.save(self.model.state_dict(), f'saved_models/checkpoints/mTANGRU_cp_v{version_number}.pt')
+                
+            case 'final_model':
+                torch.save(self.model.state_dict(), f'saved_models/mTANGRU_v{version_number}.pt')
+                print(f'mTANGRU_v{version_number} state_dict successfully saved')
+            
+        self.save_history(version_number, condition)
 
     # =============================================================================
     # method to load model from state_dict
     # =============================================================================
-    def load_model(self, version_number, init=False):
+    def load_model(self, version_number, condition):
         self.version_number = version_number
-        if init: self.model.load_state_dict(torch.load(f'saved_models/init_param_models/mTAN_v{version_number}.pt'))
-        else: self.model.load_state_dict(torch.load(f'saved_models/non_linear/mTAN_v{version_number}.pt'))
-        print(f'mTAN_v{version_number} state dictionary successfully loaded')
-        self.load_history(version_number, init)
+        match condition:
+            case 'init':
+                self.model.load_state_dict(torch.load(f'saved_models/init_param_models/mTANGRU_v{version_number}.pt'))
+                print(f'mTANGRU_v{version_number} state_dict successfully loaded')
+            case 'checkpoint':
+                self.model.load_state_dict(torch.load(f'saved_models/checkpoints/mTANGRU_cp_v{version_number}.pt'))
+                print(f'Checkpoint mTANGRU_cp{version_number} state_dict successfully saved')
+            case 'final_model':
+                self.model.load_state_dict(torch.load(f'saved_models/mTANGRU_v{version_number}.pt'))
+                print(f'mTANGRU_v{version_number} state_dict successfully saved')
+        
+        self.load_history(version_number, condition)
+
+
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================
+    def save_history(self, version_number, condition):
+        match condition:
+            case 'init':
+                with open(f'saved_models/history/init_histories/mTANGRU_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                print(f'mTANGRU_v{version_number} history saved')
+            case 'checkpoint':
+                with open(f'saved_models/history/init_histories/checkpoints/mTANGRU_cp_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+            case 'final_model':
+                with open(f'saved_models/history/mTANGRU_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                print(f'mTANGRU_v{version_number} history saved')
+                
+            
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================
+    def load_history(self, version_number, condition):
+        match condition:
+            case 'init':
+                with open(f'saved_models/history/init_histories/mTANGRU_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'mTANGRU_v{version_number} history loaded')
+            case 'checkpoint':
+                with open(f'saved_models/history/init_histories/checkpoints/mTANGRU_cp_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'Checkpoint mTANGRU_cp{version_number} history loaded')
+            case 'final_model':
+                with open(f'saved_models/history/mTANGRU_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'mTANGRU_v{version_number} history loaded')
+            
 
     # =============================================================================
     # method to print params of model
@@ -478,30 +557,6 @@ class mTAN_wrapper():
     def return_history(self):
         return self.history
 
-    # =============================================================================
-    # method that saves history to a pkl file
-    # =============================================================================
-    def save_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        else:
-            with open(f'saved_models/history/non_linear/mTAN_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        print(f'mTAN_v{version_number} history saved')
-
-    # =============================================================================
-    # method that saves history to a pkl file
-    # =============================================================================
-    def load_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/mTAN_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        else:
-            with open(f'saved_models/history/non_linear/mTAN_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        self.epochs = len(self.history['training_accuracy'])
-        print(f'mTAN_v{version_number} history loaded')
 
     # =============================================================================
     # plot given metric
@@ -657,9 +712,12 @@ class mTAN_wrapper():
 # =============================================================================
 def nonrandom_init(K, dataset):
     print(f'Beginning random initalisation with {K} different models')
-    records = {'index': None, 'highest_accuracy': 0}
+    records = {'index': None, 'lowest_loss': np.inf}
+    ref_time_pts = 1440 # number of minutes in a day
     for k in range(K):
-        model = mTAN_wrapper(mTAN_enc, 
+        model = mTAN_wrapper(mTAN_enc,
+                            version_number=99,
+                            query=torch.linspace(0, 1., ref_time_pts),
                             dataset=dataset, 
                             n_gru_units=2, 
                             embed_time=256,
@@ -670,11 +728,11 @@ def nonrandom_init(K, dataset):
                             combine=False)
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=2)
-        if max(model.history['validation_accuracy']) > records['highest_accuracy']:
+        if min(model.history['validation_loss']) < records['lowest_loss']:
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
-            records['highest_accuracy'] = max(model.history['validation_accuracy'])
-        model.save_model(k + 1, init=True)
+            records['lowest_loss'] = min(model.history['validation_loss'])
+        model.save_model(k + 1, condition='init')
         del model
         
     # save highest index 
@@ -691,19 +749,23 @@ def load_highest_model(model):
     with open('saved_models/history/init_histories/mTAN_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
-    model.load_model(highest_idx, init=True)
+    model.load_model(highest_idx, condition='init')
     
     
 # =============================================================================
 # driver code
 # =============================================================================
-def main():
+if __name__ == "__main__":
     nonrand = False
     current_dataset = 'non_linear'
     
     if nonrand: nonrandom_init(K=10, dataset=current_dataset)
-        
+    
+    vn = 99
+    ref_time_pts = 1440 # number of minutes in a day
     model = mTAN_wrapper(mTAN_enc, 
+                        version_number=vn,
+                        query=torch.linspace(0, 1, ref_time_pts),
                         dataset=current_dataset, 
                         n_gru_units=2, 
                         embed_time=256,
@@ -713,29 +775,47 @@ def main():
                         batch_size=10, 
                         combine=False)
     
-    load_highest_model(model)
+    # load_highest_model(model)
     
     # =============================================================================
     # testing zone
     # =============================================================================
-    # model.load_model(1)
-    model.fit(validate=True, epochs=10)
+    # model.load_model(version_number=3, condition='final_model')
+    # model.load_model(version_number=7, condition='init')
+    model.load_model(version_number=5, condition='checkpoint')
+    model.version_number = 6
+    h = model.history
+    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+    # list(dict.fromkeys('abracadabra'))
+    # min(model.history['validation_loss'])
+    # model.min_val_loss
+    model.fit(validate=True, epochs=60)
     # model.prune_weights(amount=0.2)
     model.predict()
     model.print_summary(print_cm=True)
     # model.confusion_matrix()
-    model.save_model(4)
+    model.save_model(version_number=6, condition='final_model')
+    
+    
+    
+    # for i in range(1, 11):
+    #     model.load_model(version_number=i, condition='init')
+    #     print(model.history["validation_accuracy"])
+    #     print(model.history["class_F1_scores"], '\n')
+        
+    
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')
     # model.plot('training_loss')
     # model.plot('validation_loss')
-    # model.plot('accuracy')
-    # model.plot('loss')
-    
-    
-if __name__ == "__main__":
-    main()        
+# =============================================================================
+#     model.plot('accuracy')
+#     model.plot('loss')      
+# =============================================================================
 
 
 

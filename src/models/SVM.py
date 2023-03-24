@@ -4,107 +4,200 @@
 Created on Fri Mar  3 18:35:11 2023
 @author: benedict
 
-Script for modelling the AIS data using a support vector machine classifier using tslearn library
+Script for modelling the AIS data using a support vector machine classifier
 
 """
 # =============================================================================
 # dependencies
 # =============================================================================
 import numpy as np
+import pandas as pd
 import pickle
+import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
-
-import AIS_loader
-
-from tslearn.utils import to_time_series_dataset # this pads with nans to create uniform sequence lengths
-from tslearn.neighbors import KNeighborsTimeSeriesClassifier
-from tslearn.svm import TimeSeriesSVC
-
 from pycm import ConfusionMatrix
 
 
+# sklearn
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import  accuracy_score, precision_score, recall_score, f1_score, roc_curve, roc_auc_score, auc, precision_recall_curve, average_precision_score
+
+
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+
+sns.set_style("darkgrid") 
+np.random.seed(10)
+
+
 # =============================================================================
-# load data
-# starting with the standardised unpadded varying time sequences 
+# data inspection
 # =============================================================================
+"""
+Function to encapsulate data investigation and visualisation
+@params:
+    train_data
+    test_data
+"""
+def inspect_data(train_data, test_data):
+    train_data.info() # 23 features, all int64 data type, no nulls
+    train_data.describe() 
+    # observe data distributions for each feature
+    train_data.hist(bins=50, figsize=(50,40)) 
+    plt.show()
+    # generate correlation matrix and see the strongest correlations with target
+    corr_mat = train_data.corr()
+    corr_mat['Y'].sort_values(ascending=False)
+    # heatmap
+    sns.heatmap(corr_mat)
+    # class imbalance
+    print(f"Train data target distribution:\n{train_data['Y'].value_counts(normalize=True)}")
+    print(f"Test data target distribution:\n{test_data['Y'].value_counts(normalize=True)}")
 
-choice ='linear_interp'
-version = '4'
-def load_data(split):
-    np.random.seed(15) # set random seed to reproduce random results
-    with open(f'../../data/pkl/{choice}/{split}_v{version}.pkl', 'rb') as f:
-        seq_list = pickle.load(f)
-    with open(f'../../data/pkl/{choice}/utils_v{version}.pkl', 'rb') as f:
-        obj = pickle.load(f)
-        n_features = obj[0]
-        n_classes = obj[1]
-        seq_length = obj[2]
-        
-    return seq_list, n_features, n_classes, seq_length
-
-
-train_seq_list, _, _, _ = load_data('test')
-test_seq_list, _, _, _ = load_data('valid')
-
-
-
-# extract targets and features from sequences in fn
-def extract(seq_list):
-    targets = []
-    features = []
-    idx = 0
-    for seq in seq_list:
-        features.append(seq[:, :-1])
-        targets.append(seq[:, -1][0])
-        idx += 1
-        # if idx==150:
-        #     break
+  
+# =============================================================================
+# preprocessing
+# =============================================================================
+"""
+Function to handle the preprocessing of the data
+@params: 
+    train_data
+    test_data
+@returns:
+    X_train 
+    y_train
+    X_test
+    y_test
+"""
+def preprocessing(train_data, test_data):
+    # numerical pipeline, only imputing in this instance but could be used for further preprocessing steps
+    numeric_transformer = Pipeline(
+        steps=[("scaler", StandardScaler())]
+    )
+    # get targets and features
+    X_train = train_data.iloc[:, :-1]
+    y_train = train_data.iloc[:, -1].values
+    X_test = test_data.iloc[:, :-1]
+    y_test = test_data.iloc[:, -1].values
+    # apply column transformer on train and test
+    X_train = numeric_transformer.fit_transform(X_train)
+    X_test = numeric_transformer.transform(X_test)
+    return X_train, y_train, X_test, y_test
     
-    return to_time_series_dataset(features), targets
+    
+"""
+Is this necessary?
+"""
+def feature_selection(X_train, X_test, y_train, y_test, k=2, verbose=True):
+    return
+
+"""
+Function to calculate metrics for evaluation of models
+@params: 
+    y_test - ground truth target values
+    y_preds - predicted target values
+    y_pp - predicted probabilities
+@returns: list of metrics
+"""
+def compute_metrics(y_test, y_preds, y_pp):
+    # metrics computed using regular threshold (0.5, sci-kit learn default for binary classification)
+    acc = accuracy_score(y_test, y_preds)
+    prec = precision_score(y_test, y_preds, average=None)
+    rec = recall_score(y_test, y_preds, average=None)
+    f1 = f1_score(y_test, y_preds, average=None)
+    roc_auc = roc_auc_score(y_test, y_pp, multi_class='ovr')
+    # fpr, tpr, _ = roc_curve(y_test, y_pp)
+    # precision, recall, _ = precision_recall_curve(y_test, y_pp)
+    # ap = average_precision_score(y_test, y_pp, average='macro', mul)
+    return [acc, prec, rec, f1, roc_auc], f1
 
 
-X_train, y_train = extract(train_seq_list)
-X_test, y_test = extract(test_seq_list)
 
 
 
-svc = TimeSeriesSVC(C=1.0, kernel='gak', gamma='auto', n_jobs=-1)
-knn = KNeighborsTimeSeriesClassifier(n_neighbors=5, metric='dtw', n_jobs=-1, verbose=1)
-# model = knn
-model = svc
-        
 
-def fit_predict(model, X_train, y_train, X_test, y_test, verbose=True):
-    start_time = datetime.now()  
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    # load data from csv
+    df = pd.read_csv('../../data/csv/fe_pd.csv')    
+    # split data
+    train_data, test_data = train_test_split(df, test_size=0.25, stratify=df['Y'])
+    # inpsect data
+    inspect_data(train_data, test_data)
+    # preprocess the data
+    X_train, y_train, X_test, y_test = preprocessing(train_data, test_data)
+    
+    # =============================================================================
+    # SVM
+    # =============================================================================
+    # init model
+    hyperparams =  {
+        'C': [0.001, 0.01, 0.1, 1, 10],
+        'gamma': [0.001, 0.01, 0.1, 1]
+        }
+    
+    model = SVC(C=1.0, probability=True, verbose=0)
+    
+    # init grid search obj
+    grid_cv = GridSearchCV(estimator=model, param_grid=hyperparams, scoring='accuracy', cv=2, n_jobs=-1, refit=True, verbose=1)
+    
+    start_time = datetime.now()
+    # run grid search
+    # grid_fit = grid_cv.fit(X_train, y_train)
     model.fit(X_train, y_train)
-    end_time = datetime.now()  
-    if verbose: print(f'Fit time: {(end_time - start_time)}')
-
-    # predict
+    end_time = datetime.now()
+    print('TIME ELAPSED: ', end_time - start_time)
+    
     y_preds = model.predict(X_test)
-    print(sum(y_preds==y_test)/len(y_test))
-        
+    y_pp = model.predict_proba(X_test)
+    
+    results_df = pd.DataFrame(columns=['Model', 'accuracy', 'precision', 'recall', 'f1', 'roc_auc'])    
+    metrics, f1 = compute_metrics(y_test, y_preds, y_pp)
+    metrics.insert(0, 'SVM')
+    results_df.loc[len(results_df)] = metrics
+    
+    
     confmat = ConfusionMatrix(actual_vector=y_test, predict_vector=y_preds)
+    confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
+    plt.savefig('../../plots/ML/SVM_cm.png', dpi=300)  
+    confmat.print_matrix()
+    confmat.stat(summary=True)
+    # =============================================================================
+    # logistic regression
+    # =============================================================================
+# =============================================================================
+#     start_time = datetime.now()
+#     linear_model = LogisticRegression(max_iter=100000)
+#     linear_model.fit(X_train, y_train)
+#     end_time = datetime.now()
+#     print('TIME ELAPSED: ', end_time - start_time)
+#     # y_preds2 = linear_model.predict(X_test)
+# =============================================================================
+# =============================================================================
+#     
+#     confmat2 = ConfusionMatrix(actual_vector=y_test.astype(int), predict_vector=y_preds2.astype(int))
+#     confmat2.plot(cmap=plt.cm.Greens,number_label=True,plot_lib="matplotlib")
+#     plt.savefig('../../plots/ML/LR_cm.png', dpi=300)    
+#     confmat2.print_matrix()
+#     confmat2.stat(summary=True)
+# =============================================================================
     
-    if verbose:
-        confmat.print_matrix()
-        confmat.stat(summary=True)
-    
-fit_predict(model, X_train, y_train, X_test, y_test)
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+

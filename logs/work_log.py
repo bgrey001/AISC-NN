@@ -181,6 +181,21 @@ Thu Mar 16 08:58:15 2023
 ------------------------------------------------>
 How does a linear model take the time series data?
 
+
+Fri Mar 17 18:10:28 2023
+------------------------------------------------>
+Implemented mTANCNN and running tests
+
+Sat Mar 18 16:41:36 2023
+------------------------------------------------>
+Continuing tests on the mTANCNN show severe instability, callbacks are needed to preserve the best model
+Implementing callbacks on the minimal model and then expanding to all other models
+
+
+
+
+
+
     
 BACKLOG:
 ------------------------------------------------>

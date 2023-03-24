@@ -99,7 +99,7 @@ class GRU(nn.Module):
 # =============================================================================
 class GRU_wrapper():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data_ver = '3'
+    data_ver = '5'
     shuffle = True
     # hyperparameters
     eta = 3e-4
@@ -108,12 +108,13 @@ class GRU_wrapper():
     # =============================================================================
     # constructor
     # =============================================================================
-    def __init__(self, GRU, dataset, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
+    def __init__(self, GRU, version_number, dataset, n_units, hidden_dim, optimizer, bidirectional, batch_size, combine=False):
         # init class members
         self.dataset = dataset
         self.version_number = 0
         self.batch_size = batch_size
-        
+        self.min_val_loss = np.inf
+        self.version_number = version_number
         self.history = {'training_accuracy': [], 
                         'training_loss': [], 
                         'validation_accuracy': [], 
@@ -171,6 +172,7 @@ class GRU_wrapper():
         train_print_steps = 200
         val_print_steps = plot_steps = 20
         train_loss = valid_loss = 0
+        avg_val_loss = np.inf
         # instantiate DataLoader
         train_generator = DataLoader(dataset=self.train_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.train_data.GRU_collate, drop_last=True)
         if validate: valid_generator = DataLoader(dataset=self.valid_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.valid_data.GRU_collate, drop_last=True)
@@ -231,11 +233,20 @@ class GRU_wrapper():
                             valid_loss += v_loss.item()
                     v_index += 1
                 val_accuracy = v_correct / (len(valid_generator))
+                avg_val_loss = valid_loss/valid_loss_counter
                 self.validation_accuracies.append(val_accuracy)
-                self.validation_losses.append(valid_loss/valid_loss_counter)
+                self.validation_losses.append(avg_val_loss)
                 print("========================================================================================================================================================== \n" +
-                      f" ------------------> validation accuracy = {val_accuracy}, average validation loss = {valid_loss / valid_loss_counter} <------------------" +
+                      f" ------------------> validation accuracy = {val_accuracy}, average validation loss = {avg_val_loss} <------------------" +
                       "========================================================================================================================================================== \n")
+                
+                # model checkpoints or callbacks
+                if avg_val_loss < self.min_val_loss:
+                    print('in loop')
+                    self.min_val_loss = avg_val_loss
+                    print(f'CHECKPOINT: new minimum val loss {self.min_val_loss}, checkpoint created.\n')
+                    self.checkpoint()
+
                 valid_loss = 0
                 valid_loss_counter = 0
             else: self.predict()
@@ -348,29 +359,90 @@ class GRU_wrapper():
     # =============================================================================
     def total_params(self):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+    
+    
+    # =============================================================================
+    # method to save the model and its history if it's produced the best results so far
+    # =============================================================================
+    def checkpoint(self):
+        self.save_model(version_number=self.version_number, condition='checkpoint')
+        
         
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
-    def save_model(self, version_number, init=False):
+    def save_model(self, version_number, condition):
         self.version_number = version_number
-        if init: torch.save(self.model.state_dict(), f'saved_models/init_param_models/GRU_v{version_number}.pt')
-        elif self.dataset == 'varying': torch.save(self.model.state_dict(), f'saved_models/zero_padded/GRU_v{version_number}.pt')
-        elif self.dataset == 'linear_interp': torch.save(self.model.state_dict(), f'saved_models/linear_interp/GRU_v{version_number}.pt')
-        print(f'GRU_v{version_number} state_dict successfully saved')
-        self.save_history(version_number, init)
+        match condition:
+            case 'init':
+                torch.save(self.model.state_dict(), f'saved_models/init_param_models/GRU_v{version_number}.pt')
+                print(f'GRU_v{version_number} state_dict successfully saved')
+            case 'checkpoint':
+                torch.save(self.model.state_dict(), f'saved_models/checkpoints/GRU_cp_v{version_number}.pt')
+                # print(f'Checkpoint GRU_cp{version_number} state_dict successfully saved')
+            case 'final_model':
+                torch.save(self.model.state_dict(), f'saved_models/GRU_v{version_number}.pt')
+                print(f'GRU_v{version_number} state_dict successfully saved')
+            
+        self.save_history(version_number, condition)
 
     # =============================================================================
     # method to load model from state_dict
     # =============================================================================
-    def load_model(self, version_number, init=False):
+    def load_model(self, version_number, condition):
         self.version_number = version_number
-        if init: self.model.load_state_dict(torch.load(f'saved_models/init_param_models/GRU_v{version_number}.pt'))
-        elif self.dataset == 'varying': self.model.load_state_dict(torch.load(f'saved_models/zero_padded/GRU_v{version_number}.pt'))
-        elif self.dataset == 'linear_interp': self.model.load_state_dict(torch.load(f'saved_models/linear_interp/GRU_v{version_number}.pt'))
-        print(f'GRU_v{version_number} state dictionary successfully loaded')
-        self.load_history(version_number, init)
+        match condition:
+            case 'init':
+                self.model.load_state_dict(torch.load(f'saved_models/init_param_models/GRU_v{version_number}.pt'))
+                print(f'GRU_v{version_number} state_dict successfully loaded')
+            case 'checkpoint':
+                self.model.load_state_dict(torch.load(f'saved_models/checkpoints/GRU_cp_v{version_number}.pt'))
+                print(f'Checkpoint GRU_cp{version_number} state_dict successfully saved')
+            case 'final_model':
+                self.model.load_state_dict(torch.load(f'saved_models/GRU_v{version_number}.pt'))
+                print(f'GRU_v{version_number} state_dict successfully saved')
+        
+        self.load_history(version_number, condition)
 
+
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================
+    def save_history(self, version_number, condition):
+        match condition:
+            case 'init':
+                with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                print(f'GRU_v{version_number} history saved')
+            case 'checkpoint':
+                with open(f'saved_models/history/init_histories/checkpoints/GRU_cp_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                # print(f'Checkpoint GRU_cp{version_number} history saved')
+            case 'final_model':
+                with open(f'saved_models/history/GRU_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                print(f'GRU_v{version_number} history saved')
+    
+
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================
+    def load_history(self, version_number, condition):
+        match condition:
+            case 'init':
+                with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'GRU_v{version_number} history loaded')
+            case 'checkpoint':
+                with open(f'saved_models/history/init_histories/checkpoints/GRU_cp_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'Checkpoint GRU_cp{version_number} history loaded')
+            case 'final_model':
+                with open(f'saved_models/history/GRU_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'GRU_v{version_number} history loaded')
+        
+        
     # =============================================================================
     # method to print params of model
     # =============================================================================
@@ -387,39 +459,7 @@ class GRU_wrapper():
     # =============================================================================
     def return_history(self):
         return self.history
-
-    # =============================================================================
-    # method that saves history to a pkl file
-    # =============================================================================
-    def save_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/GRU_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/GRU_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-                
-        print(f'GRU_v{version_number} history saved')
-
-    # =============================================================================
-    # method that saves history to a pkl file
-    # =============================================================================
-    def load_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/GRU_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        elif self.dataset == 'varying':
-            with open(f'saved_models/history/zero_padded/GRU_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        elif self.dataset == 'linear_interp':
-            with open(f'saved_models/history/linear_interp/GRU_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        self.epochs = len(self.history['training_accuracy'])
-        print(f'GRU_v{version_number} history loaded')
-
+    
     # =============================================================================
     # plot given metric
     # =============================================================================
@@ -584,7 +624,7 @@ def nonrandom_init(K, dataset):
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
             records['highest_accuracy'] = max(model.history['validation_accuracy'])
-        model.save_model(k + 1, init=True)
+        model.save_model(k + 1, init='init')
         del model
     # save highest index 
     with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'wb') as f:
@@ -599,7 +639,7 @@ def load_highest_model(model):
     with open('saved_models/history/init_histories/GRU_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
-    model.load_model(highest_idx, init=True)
+    model.load_model(highest_idx, init='init')
     
     
     
@@ -616,6 +656,7 @@ def main():
         nonrandom_init(K=10, dataset=current_dataset)
         
     model = GRU_wrapper(GRU, 
+                        version_number=99,
                         dataset=current_dataset, 
                         n_units=2, 
                         hidden_dim=64, 
@@ -628,13 +669,20 @@ def main():
     # =============================================================================
     # testing zone
     # =============================================================================
-    model.load_model(3)
-    # model.fit(validate=True, epochs=30)
+    # model.load_model(3)
+    model.fit(validate=True, epochs=1)
     # model.prune_weights(amount=0.2)
+    
+    mvl = model.min_val_loss
+    print('\nMIN VAL LOSS: ', mvl)
+
+    
     # model.predict()
-    model.print_summary(print_cm=True)
+    # model.print_summary(print_cm=True)
+    
     # model.confusion_matrix()
     # model.save_model(12)
+    
     
     # model.plot('training_accuracy')
     # model.plot('validation_accuracy')
@@ -645,9 +693,41 @@ def main():
 
     
 if __name__ == "__main__":  
-    main()
-
-
+    # main()
+    # load the best randomly initialised network parameters for further training
+    nonrand = False
+    current_dataset = 'linear_interp'
+    # current_dataset = 'varying'
+    
+    if nonrand:
+        nonrandom_init(K=10, dataset=current_dataset)
+    
+    vn = 99
+    model = GRU_wrapper(GRU, 
+                        version_number=vn,
+                        dataset=current_dataset, 
+                        n_units=2, 
+                        hidden_dim=64, 
+                        optimizer='AdamW', 
+                        bidirectional=True, 
+                        batch_size=64, 
+                        combine=False)
+    
+    
+    model.print_params()
+    # load_highest_model(model)
+    # model.seq_length
+    # =============================================================================
+    # testing zone
+    # =============================================================================
+    # model.load_model(3)
+    model.fit(validate=True, epochs=1)
+    model.print_summary(True)
+    # model.prune_weights(amount=0.2)
+    
+    # model.load_model(version_number=vn, condition='checkpoint')    
+    # model.min_val_loss
+    
 
 
 

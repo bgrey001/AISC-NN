@@ -110,24 +110,37 @@ class CNN_1D(nn.Module):
     # forward propagation method
     # =============================================================================
     def forward(self, input_x):
+        print(input_x.shape)
         
         input_x = self.conv_1(input_x)
         input_x = self.batch_norm_1(input_x)
         input_x = self.maxpool(self.relu(input_x))
 
+        print(input_x.shape)
+        
         input_x = self.res_block_1(input_x)
         input_x = self.res_block_2(input_x)
+        print(input_x.shape)
+
         input_x = self.avgpool(input_x)
 
+        print(input_x.shape)
+
         input_x = self.conv_2(input_x)
+        print(input_x.shape)
+
         input_x = self.batch_norm_2(input_x)
         input_x = self.maxpool(self.relu(input_x))
-        
+        print(input_x.shape)
+
         input_x = self.flatten(input_x)
+        print(input_x.shape)
+
         input_x = F.relu(self.fc_1(input_x))
         input_x = F.relu(self.fc_2(input_x))
         input_x = F.relu(self.fc_3(input_x))
-        
+        print(input_x.shape)
+
         return input_x
 
 # =============================================================================
@@ -141,7 +154,7 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    data_ver = '3'
+    data_ver = '5'
     shuffle = True
     # =============================================================================
     # Hyperparameters
@@ -726,13 +739,13 @@ def load_highest_model(model):
 def main():
     # load the best randomly initialised network parameters for further training
     nonrand = False
-    # current_dataset = 'linear_interp'
-    current_dataset = 'varying'
+    current_dataset = 'linear_interp'
+    # current_dataset = 'varying'
     
     if nonrand:
         nonrandom_init(K=20, dataset=current_dataset)
         
-    model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=128, combine=False)
+    model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=64, combine=False)
     # load_highest_model(model)
     
     # =============================================================================
@@ -740,11 +753,13 @@ def main():
     # =============================================================================
     # model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
     # model.load_model(2)
-    model.fit(validate=True, epochs=1)
+    # model.fit(validate=True, epochs=1)
     # model.prune_weights(amount=0.21)
-    model.predict()
+    # model.predict()
     # model.print_params()
-    model.print_summary(print_cm=(True))
+    # model.print_summary(print_cm=(True))
+    
+    model.print_params()
     # model.save_model(2)
     
     
@@ -753,8 +768,8 @@ def main():
     # model.plot('training_loss')
     # model.plot('validation_loss')
     
-    model.plot('accuracy')
-    model.plot('loss')
+    # model.plot('accuracy')
+    # model.plot('loss')
     
     
 if __name__ == "__main__":        

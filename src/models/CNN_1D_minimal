@@ -27,7 +27,7 @@ import AIS_loader as data_module
 # =============================================================================
 # model class inherits from torch Module class
 # =============================================================================
-class CNN_1D_v1(nn.Module):
+class CNN_MM_1D_v1(nn.Module):
 
     # =============================================================================
     # class attributes
@@ -38,7 +38,7 @@ class CNN_1D_v1(nn.Module):
     # constructor
     # =============================================================================
     def __init__(self, n_features, n_classes, seq_length, conv_l1, kernel_size, pool_size):
-        super(CNN_1D_v1, self).__init__()
+        super(CNN_MM_1D_v1, self).__init__()
 
         # conv layers 1
         self.conv_1 = nn.Conv1d(in_channels=n_features, out_channels=conv_l1, kernel_size=kernel_size)
@@ -56,8 +56,7 @@ class CNN_1D_v1(nn.Module):
     def forward(self, input_x):
 
         # conv layers 1
-        print(input_x.shape)
-        quit()
+        # print(input_x.shape)
         input_x = self.conv_1(input_x)
         input_x = self.relu_1(input_x)
         input_x = self.pool_1(input_x)
@@ -101,11 +100,11 @@ class CNN_1D_wrapper():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def __init__(self, CNN_1D, optimizer, combine=False):
+    def __init__(self, CNN_1D, version_number, optimizer, combine=False):
         
         
         # init class members
-        self.version_number = 0
+        self.version_number = version_number
 
         self.history = {'training_accuracy': [], 
                         'training_loss': [], 
@@ -120,8 +119,7 @@ class CNN_1D_wrapper():
                         'class_F1_scores': None,
                         'class_supports': None}
         
-        
-        
+        self.min_val_loss = np.inf        
         
         self.training_losses, self.validation_losses, self.test_losses, self.training_accuracies, self.validation_accuracies, self.test_accuracies = ([] for i in range(6))
         self.class_accuracies = None
@@ -173,6 +171,9 @@ class CNN_1D_wrapper():
         else:
             self.epochs = epochs
         
+        # used for callbacks
+        min_val_loss = np.inf
+        
         train_print_steps = 200
         val_print_steps = plot_steps = 20
         train_loss = valid_loss = 0
@@ -188,6 +189,7 @@ class CNN_1D_wrapper():
             v_correct = 0
             train_loss_counter = 0
             valid_loss_counter = 0
+            avg_val_loss = np.inf
 
             # =============================================================================
             # training loop
@@ -218,14 +220,18 @@ class CNN_1D_wrapper():
                     # print(metric(outputs, labels))
                     if (index + 1) % train_print_steps == 0:
                         print(f'Epoch {epoch}, batch number: {index + 1}, training loss = {loss}')
-                    train_loss_counter += 1
-                    train_loss += loss.item()
+                        
+                train_loss_counter += 1
+                train_loss += loss.item()
                             
                 index += 1
                 
             train_accuracy = aggregate_correct / (len(train_generator))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
+            
+            self.history['training_accuracy'].append(train_accuracy)
+            self.history['training_loss'].append(train_loss/train_loss_counter)
             print("========================================================================================================================================================== \n" +
                   f"------------------> training accuracy = {train_accuracy}, average training loss = {train_loss / train_loss_counter} <------------------\n" +
                   "========================================================================================================================================================== \n")
@@ -259,13 +265,27 @@ class CNN_1D_wrapper():
                             
                     v_index += 1
                     
+                
                 val_accuracy = v_correct / (len(valid_generator))
+                avg_val_loss = valid_loss / valid_loss_counter
                 self.validation_accuracies.append(val_accuracy)
                 self.validation_losses.append(valid_loss/valid_loss_counter)
+                                
+                # history
+                self.history['validation_accuracy'].append(val_accuracy)
+                self.history['validation_loss'].append(valid_loss/valid_loss_counter)
                 print("========================================================================================================================================================== \n" +
                       f" ------------------> validation accuracy = {val_accuracy}, average validation loss = {valid_loss / valid_loss_counter} <------------------" +
                       "========================================================================================================================================================== \n")
 
+                # model checkpoints or callbacks
+                if avg_val_loss < self.min_val_loss:
+                    self.min_val_loss = avg_val_loss
+                    print(f'CHECKPOINT: new minimum val loss {self.min_val_loss}, checkpoint created.\n')
+                    self.checkpoint()
+                    
+                    
+                
                 valid_loss = 0
                 valid_loss_counter = 0
             else:
@@ -274,16 +294,19 @@ class CNN_1D_wrapper():
             if epoch % 2 == 0:
                 self.confusion_matrix()
                 print(f'Class F1-scores: {self.history["class_F1_scores"]}\n')
+                
 
-        # history
-        self.history['training_accuracy'] += self.training_accuracies
-        self.history['training_loss'] += self.training_losses
-        self.history['validation_accuracy'] += self.validation_accuracies
-        self.history['validation_loss'] += self.validation_losses
 
     # =============================================================================
     # method that tests model on test data
     # =============================================================================
+    
+# =============================================================================
+#     method to save the model and its history if it's produced the best results so far
+# =============================================================================
+    def checkpoint(self):
+        self.save_model(version_number=self.version_number, condition='checkpoint')
+            
 
     def predict(self):
 
@@ -362,7 +385,7 @@ class CNN_1D_wrapper():
         
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
-            plt.savefig(f'../../plots/CNN_1D/ResBlock_v{self.version_number}/confmat_CNN_1D_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/CNN_1D/ResBlock_v{self.version_number}/confmat_CNN_MM_1D_v{self.version_number}.png', dpi=300)
         
         
         self.history['confusion_matrix'] = confmat
@@ -380,33 +403,81 @@ class CNN_1D_wrapper():
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             
         
-    
     # =============================================================================
     # method to save model to state_dict
     # =============================================================================
-
-    def save_model(self, version_number, init=False):
+    def save_model(self, version_number, condition):
         self.version_number = version_number
-        if init:
-            torch.save(self.model.state_dict(), f'saved_models/init_param_models/CNN_1D_v{version_number}.pt')
-        else:
-            torch.save(self.model.state_dict(), f'saved_models/CNN_1D_v{version_number}.pt')
+        match condition:
+            case 'init':
+                torch.save(self.model.state_dict(), f'saved_models/init_param_models/CNN_MM_1D_v{version_number}.pt')
+                print(f'CNN_MM_1D_v{version_number} state_dict successfully saved')
+            case 'checkpoint':
+                torch.save(self.model.state_dict(), f'saved_models/checkpoints/CNN_1D_cp_v{version_number}.pt')
+                # print(f'Checkpoint CNN_1D_cp{version_number} state_dict successfully saved')
+            case 'final_model':
+                torch.save(self.model.state_dict(), f'saved_models/CNN_MM_1D_v{version_number}.pt')
+                print(f'CNN_MM_1D_v{version_number} state_dict successfully saved')
             
-        print(f'CNN_1D_v{version_number} state_dict successfully saved')
-        self.save_history(version_number, init)
+        self.save_history(version_number, condition)
 
     # =============================================================================
     # method to load model from state_dict
     # =============================================================================
-    def load_model(self, version_number, init=False):
+    def load_model(self, version_number, condition):
         self.version_number = version_number
-        if init:
-            self.model.load_state_dict(torch.load(f'saved_models/init_param_models/CNN_1D_v{version_number}.pt'))
-        else:
-            self.model.load_state_dict(torch.load(f'saved_models/CNN_1D_v{version_number}.pt'))
-        print(f'CNN_1D_v{version_number} state dictionary successfully loaded')
-        self.load_history(version_number, init)
+        match condition:
+            case 'init':
+                self.model.load_state_dict(torch.load(f'saved_models/init_param_models/CNN_MM_1D_v{version_number}.pt'))
+                print(f'CNN_MM_1D_v{version_number} state_dict successfully loaded')
+            case 'checkpoint':
+                self.model.load_state_dict(torch.load(f'saved_models/checkpoints/CNN_1D_cp_v{version_number}.pt'))
+                print(f'Checkpoint CNN_1D_cp{version_number} state_dict successfully saved')
+            case 'final_model':
+                self.model.load_state_dict(torch.load(f'saved_models/CNN_MM_1D_v{version_number}.pt'))
+                print(f'CNN_MM_1D_v{version_number} state_dict successfully saved')
+        
+        self.load_history(version_number, condition)
 
+
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================
+    def save_history(self, version_number, condition):
+        match condition:
+            case 'init':
+                with open(f'saved_models/history/init_histories/CNN_MM_1D_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                print(f'CNN_MM_1D_v{version_number} history saved')
+            case 'checkpoint':
+                with open(f'saved_models/history/init_histories/checkpoints/CNN_1D_cp_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                # print(f'Checkpoint CNN_1D_cp{version_number} history saved')
+            case 'final_model':
+                with open(f'saved_models/history/CNN_MM_1D_v{version_number}_history.pkl', 'wb') as f:
+                    pickle.dump(self.history, f)
+                print(f'CNN_MM_1D_v{version_number} history saved')
+    
+
+    # =============================================================================
+    # method that saves history to a pkl file
+    # =============================================================================
+    def load_history(self, version_number, condition):
+        match condition:
+            case 'init':
+                with open(f'saved_models/history/init_histories/CNN_MM_1D_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'CNN_MM_1D_v{version_number} history loaded')
+            case 'checkpoint':
+                with open(f'saved_models/history/init_histories/checkpoints/CNN_1D_cp_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'Checkpoint CNN_1D_cp{version_number} history loaded')
+            case 'final_model':
+                with open(f'saved_models/history/CNN_MM_1D_v{version_number}_history.pkl', 'rb') as f:
+                    self.history = pickle.load(f)
+                print(f'CNN_MM_1D_v{version_number} history loaded')
+        
+        
     # =============================================================================
     # method to print params of model
     # =============================================================================
@@ -427,32 +498,7 @@ class CNN_1D_wrapper():
     # =============================================================================
     def return_history(self):
         return self.history
-
-    # =============================================================================
-    # method that saves history to a pkl file
-    # =============================================================================
-    def save_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        else:
-            with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'wb') as f:
-                pickle.dump(self.history, f)
-        print(f'CNN_1D_v{version_number} history saved')
-
-    # =============================================================================
-    # method that saves history to a pkl file
-    # =============================================================================
-
-    def load_history(self, version_number, init=False):
-        if init:
-            with open(f'saved_models/history/init_histories/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        else:
-            with open(f'saved_models/history/CNN_1D_v{version_number}_history.pkl', 'rb') as f:
-                self.history = pickle.load(f)
-        print(f'CNN_1D_v{version_number} history loaded')
-
+        
     # =============================================================================
     # plot given metric
     # =============================================================================
@@ -534,7 +580,7 @@ class CNN_1D_wrapper():
 
     def print_summary(self, print_cm=False):
         self.confusion_matrix()
-        print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
+        print(f'\nModel: CNN_MM_1D_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
               f'conv_l1 = {self.conv_l1} \nkernel_size = {self.kernel_size} \npool_size = {self.pool_size} \n'
               f'Batch size = {self.batch_size} \nEpochs = {self.epochs} \nModel structure: \n{self.model.eval()} \nTotal parameters = {self.total_params()}'
@@ -567,7 +613,7 @@ def nonrandom_init(K):
     records = {'index': None, 'highest_accuracy': 0}
     # models = []
     for k in range(K):
-        model = CNN_1D_wrapper(CNN_1D_v1, optimizer='AdamW')
+        model = CNN_1D_wrapper(CNN_MM_1D_v1, optimizer='AdamW')
         print(f'MODEL {k + 1} -------------------------------->')
         model.fit(validate=True, epochs=3)
         # print(models[k].history['validation_accuracy'])
@@ -575,7 +621,7 @@ def nonrandom_init(K):
             records['index'] = k + 1
             print(f'New highest record: model {k + 1}')
             records['highest_accuracy'] = max(model.history['validation_accuracy'])
-        model.save_model(k + 1, init=True)
+        model.save_model(k + 1, condition='init')
         del model
         
     # save highest index 
@@ -594,22 +640,28 @@ def nonrandom_init(K):
 # load the parameters of the model with the highest validation accuracy
 # =============================================================================
 def load_highest_model(model):
-    with open('saved_models/history/init_histories/highest_idx.pkl', 'rb') as f:
+    with open('saved_models/history/init_histories/CNN_MM_highest_idx.pkl', 'rb') as f:
         highest_idx = pickle.load(f)
         print(f"Highest_idx = {highest_idx}, loaded successfully")
-    model.load_model(highest_idx, init=True)
+    model.load_model(highest_idx, condition='init')
     
     
 # =============================================================================
 # testing zone
 # =============================================================================
-model = CNN_1D_wrapper(CNN_1D_v1, optimizer='SGD', combine=False)
+vn = 12
+model = CNN_1D_wrapper(CNN_MM_1D_v1, version_number=vn, optimizer='SGD', combine=False)
 # print(model.history)
 # model.load_model(5)
-model.fit(validate=True, epochs=4)
+model.fit(validate=True, epochs=10)
 model.predict()
 model.print_summary(print_cm=(True))
-model.print_params()
+# model.print_params()
+
+# load checkpoint model
+model.load_model(version_number=12, condition='checkpoint')
+h = model.history
+# model.min_val_loss
 
 
 

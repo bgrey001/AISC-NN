@@ -13,6 +13,8 @@ Feature extraction script using tsfresh library
 # =============================================================================
 import numpy as np
 import pandas as pd
+import dask
+from dask.dataframe import from_pandas
 import pickle
 from datetime import datetime
 from pycm import ConfusionMatrix
@@ -21,7 +23,7 @@ import AIS_loader
 
 from tsfresh import extract_features, extract_relevant_features, select_features
 from tsfresh.utilities.dataframe_functions import impute
-from tsfresh.feature_extraction import ComprehensiveFCParameters
+from tsfresh.feature_extraction import ComprehensiveFCParameters, MinimalFCParameters
 
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
@@ -98,19 +100,16 @@ def process(seq_list, select, save, save_version):
     # extract features
     extraction_settings = ComprehensiveFCParameters() # this can be tuned?
     
+    ddf = from_pandas(out_df, npartitions=6)
+        
+    # extract features
+    extraction_settings = MinimalFCParameters() # this can be tuned?
+    
     # each sequence is being pushed into a single row with all features extracted along the y axis
-    X_fe = extract_features(out_df, column_id='id', column_sort='time', default_fc_parameters=extraction_settings, impute_function=impute)
+    X_fe = extract_features(ddf, column_id='id', column_sort='time', default_fc_parameters=extraction_settings, disable_progressbar=False)
 
-    
-    
-    # feature selection
-    if select:
-        X_filt = select_features(X_fe, targets)
-        X_filt.head()
-    
     # split the data
     X_train, X_test, y_train, y_test = train_test_split(X_fe, targets, test_size=0.4)
-    if select: X_train, X_test = X_train[X_filt.columns], X_test[X_filt.columns]
     
     if save:
         with open(f'../../data/pkl/feature_extraction/v{save_version}.pkl', 'wb') as f:
