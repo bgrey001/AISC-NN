@@ -79,9 +79,13 @@ class multiTimeAttention(nn.Module):
         value = value.unsqueeze(1)
         query, key = [l(x).view(x.size(0), -1, self.h, self.embed_time_k).transpose(1, 2)
                       for l, x in zip(self.linears, (query, key))]
+        # print(query.shape, key.shape)
         x, _ = self.attention(query, key, value, mask, dropout)
+        # print(x.shape)
         x = x.transpose(1, 2).contiguous().view(batch, -1, self.h * dim)
-        return self.linears[-1](x)
+        out = self.linears[-1](x)
+        # print(out.shape)
+        return out
 
 # =============================================================================
 # custom Residual block
@@ -163,22 +167,30 @@ class mTANCNN(nn.Module):
     # =============================================================================
     def forward(self, input_x):
         
+        # print(input_x.shape)
         input_x = self.conv_1(input_x)
+        # print(input_x.shape)
         input_x = self.batch_norm_1(input_x)
         input_x = self.maxpool(self.relu(input_x))
+        # print(input_x.shape)                
+
+
 
         input_x = self.res_block_1(input_x)
         input_x = self.res_block_2(input_x)
         input_x = self.avgpool(input_x)
 
         input_x = self.conv_2(input_x)
+        # print(input_x.shape)
         input_x = self.batch_norm_2(input_x)
         input_x = self.maxpool(self.relu(input_x))
-        
         input_x = self.flatten(input_x)
         input_x = F.relu(self.fc_1(input_x))
+        # print(input_x.shape)
         input_x = F.relu(self.fc_2(input_x))
+        # print(input_x.shape)
         input_x = F.relu(self.fc_3(input_x))
+        # print(input_x.shape)
         
         return input_x
 
@@ -225,7 +237,9 @@ class mTAN_enc(nn.Module):
         tt = tt.to(self.device)
         tt = tt.unsqueeze(-1)
         out2 = torch.sin(self.periodic(tt))
+        # print(out2.shape)
         out1 = self.linear(tt)
+        # print(out2.shape)
         return torch.cat([out1, out2], -1)
        
     # =============================================================================
@@ -241,6 +255,7 @@ class mTAN_enc(nn.Module):
     
        
     def forward(self, x, time_steps):
+        # print(x.shape)
         time_steps = time_steps.to(self.device)
         mask = x[:, :, self.dim:]
         mask = torch.cat((mask, mask), 2)
@@ -250,9 +265,11 @@ class mTAN_enc(nn.Module):
         else:
             key = self.time_embedding(time_steps, self.embed_time).to(self.device)
             query = self.fixed_time_embedding(self.query.unsqueeze(0)).to(self.device)
+            
+        # print(time_steps.shape)
         # self attention?
         att_out = self.att(query=query, key=key, value=x, mask=None) # key and value are both the embeddings and the value is the feature vector
-        
+        # print(att_out.shape)
         # print(att_out.shape)
         resnet_in = torch.transpose(input=att_out, dim0=1, dim1=2)
         # print(resnet_in.shape)
@@ -868,12 +885,15 @@ if __name__ == "__main__":
     # testing zone
     # =============================================================================
     model.load_model(version_number=12, condition='final_model')
-    h = model.history
-    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
-    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
-    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
-    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+# =============================================================================
+#     h = model.history
+#     model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+#     model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+#     model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+#     model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+# =============================================================================
     # model.fit(validate=True, epochs=20)
+    model.print_params()
     # # model.prune_weights(amount=0.2)
     # model.predict()
     # model.print_summary(print_cm=True)

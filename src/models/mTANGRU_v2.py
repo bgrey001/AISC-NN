@@ -125,6 +125,7 @@ class mTAN_enc(nn.Module):
             nn.Linear(128, 64),
             nn.Linear(64, self.n_classes))
             
+        
 
     # =============================================================================
     # method that learns the time embeddings as weights
@@ -149,6 +150,7 @@ class mTAN_enc(nn.Module):
     
        
     def forward(self, x, time_steps):
+        print(x.shape)
         time_steps = time_steps.to(self.device)
         mask = x[:, :, self.dim:]
         mask = torch.cat((mask, mask), 2)
@@ -294,8 +296,8 @@ class mTAN_wrapper():
             train_accuracy = aggregate_correct / (len(train_generator))
             self.training_accuracies.append(train_accuracy)
             self.training_losses.append(train_loss/train_loss_counter)
-            self.history['training_accuracy'].append(self.training_accuracies)
-            self.history['training_loss'].append(self.training_losses)
+            self.history['training_accuracy'].append(train_accuracy)
+            self.history['training_loss'].append(train_loss/train_loss_counter)
             print("========================================================================================================================================================== \n" +
                   f"------------------> training accuracy = {train_accuracy}, average training loss = {train_loss / train_loss_counter} <------------------\n" +
                   "========================================================================================================================================================== \n")
@@ -331,8 +333,8 @@ class mTAN_wrapper():
                 avg_val_loss = valid_loss / valid_loss_counter
                 self.validation_accuracies.append(val_accuracy)
                 self.validation_losses.append(avg_val_loss)
-                self.history['validation_accuracy'].append(self.validation_accuracies)
-                self.history['validation_loss'].append(self.validation_losses)
+                self.history['validation_accuracy'].append(val_accuracy)
+                self.history['validation_loss'].append(avg_val_loss)
                 print("========================================================================================================================================================== \n" +
                       f" ------------------> validation accuracy = {val_accuracy}, average validation loss = {valid_loss / valid_loss_counter} <------------------" +
                       "========================================================================================================================================================== \n")
@@ -783,41 +785,46 @@ if __name__ == "__main__":
     # model.load_model(version_number=3, condition='final_model')
     # model.load_model(version_number=7, condition='init')
     model.load_model(version_number=5, condition='checkpoint')
-    model.version_number = 6
-    h = model.history
-    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
-    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
-    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
-    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+# =============================================================================
+#     model.version_number = 6
+#     h = model.history
+#     model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+#     model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+#     model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+#     model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+# =============================================================================
     # list(dict.fromkeys('abracadabra'))
     # min(model.history['validation_loss'])
     # model.min_val_loss
     model.fit(validate=True, epochs=60)
-    # model.prune_weights(amount=0.2)
-    model.predict()
-    model.print_summary(print_cm=True)
-    # model.confusion_matrix()
-    model.save_model(version_number=6, condition='final_model')
-    
-    
-    
-    # for i in range(1, 11):
-    #     model.load_model(version_number=i, condition='init')
-    #     print(model.history["validation_accuracy"])
-    #     print(model.history["class_F1_scores"], '\n')
-        
-    
-    
-    # model.plot('training_accuracy')
-    # model.plot('validation_accuracy')
-    # model.plot('training_loss')
-    # model.plot('validation_loss')
 # =============================================================================
+#     # model.prune_weights(amount=0.2)
+#     model.predict()
+#     model.print_summary(print_cm=True)
+#     # model.confusion_matrix()
+#     model.save_model(version_number=6, condition='final_model')
+#     
+#     
+#     model.prune_weights(amount=0.2)
+# 
+#     
+#     
+#     # for i in range(1, 11):
+#     #     model.load_model(version_number=i, condition='init')
+#     #     print(model.history["validation_accuracy"])
+#     #     print(model.history["class_F1_scores"], '\n')
+#         
+#     
+#     
+#     # model.plot('training_accuracy')
+#     # model.plot('validation_accuracy')
+#     # model.plot('training_loss')
+#     # model.plot('validation_loss')
 #     model.plot('accuracy')
 #     model.plot('loss')      
+# 
+# 
 # =============================================================================
-
-
 
 
 

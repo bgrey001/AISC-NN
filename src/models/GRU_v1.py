@@ -722,8 +722,9 @@ if __name__ == "__main__":
     # =============================================================================
     # model.load_model(3)
     model.fit(validate=True, epochs=1)
+    model.predict()
     model.print_summary(True)
-    # model.prune_weights(amount=0.2)
+    model.prune_weights(amount=0.2)
     
     # model.load_model(version_number=vn, condition='checkpoint')    
     # model.min_val_loss
