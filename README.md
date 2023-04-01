@@ -35,9 +35,10 @@ All development was conducted using the Spyder IDE with a virtual environment co
 
 Results on the AIS test data are shown here:
 
-| Data pipeline            | Model                    | Overall accuracy | Macro F1-score  | Training time (hh:mm:ss) * per epoch |
-|--------------------------|--------------------------|------------------|-----------------|--------------------------------------|
-| Zero padding             | GRU 1D CNN               | 95.379% 93.302%  | 0.92457 0.87608 | 00:01:38 * 00:01:01 *                |
-| Linear interpolation     | GRU 1D CNN               | 94.01% 90.069%   | 0.92868 0.87219 | 00:01:21 * 00:00:51 *                |
-| Non-linear interpolation | GRU 1D CNN               | 94.292% 91.664%  | 0.91183 0.87219 | 00:24:43 * 00:24:27 *                |
-| Feature extracted        | SVM  Logistic regression | 75.028% 60.65%   | 0.51715 0.2897  | 05:25:39 00:00:53                    |
+
+| Data pipeline            | Model                       | Overall accuracy   | Macro F1-score     | Training time<br>(hh:mm:ss)<br>* per epoch |
+|--------------------------|-----------------------------|--------------------|--------------------|--------------------------------------------|
+| Zero padding             | GRU<br>1D CNN               | 95.379%<br>93.302% | 0.92457<br>0.87608 | 00:01:38 *<br>00:01:01 *                   |
+| Linear interpolation     | GRU<br>1D CNN               | 94.01%<br>90.069%  | 0.92868<br>0.87219 | 00:01:21 *<br>00:00:51 *                   |
+| Non-linear interpolation | GRU<br>1D CNN               | 94.292%<br>91.664% | 0.91183<br>0.87219 | 00:24:43 *<br>00:24:27 *                   |
+| Feature extracted        | SVM <br>Logistic regression | 75.028%<br>60.65%  | 0.51715<br>0.2897  | 05:25:39<br>00:00:53                       |
