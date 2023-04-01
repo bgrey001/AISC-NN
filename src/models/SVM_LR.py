@@ -18,13 +18,11 @@ import seaborn as sns
 from datetime import datetime
 from pycm import ConfusionMatrix
 
-
 # sklearn
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import  accuracy_score, precision_score, recall_score, f1_score, roc_curve, roc_auc_score, auc, precision_recall_curve, average_precision_score
-
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.svm import SVC
@@ -116,17 +114,6 @@ def compute_metrics(y_test, y_preds, y_pp):
     return [acc, prec, rec, f1, roc_auc], f1
 
 
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
     # load data from csv
     df = pd.read_csv('../../data/csv/fe_pd.csv')    
@@ -175,22 +162,18 @@ if __name__ == "__main__":
     # =============================================================================
     # logistic regression
     # =============================================================================
-# =============================================================================
-#     start_time = datetime.now()
-#     linear_model = LogisticRegression(max_iter=100000)
-#     linear_model.fit(X_train, y_train)
-#     end_time = datetime.now()
-#     print('TIME ELAPSED: ', end_time - start_time)
-#     # y_preds2 = linear_model.predict(X_test)
-# =============================================================================
-# =============================================================================
-#     
-#     confmat2 = ConfusionMatrix(actual_vector=y_test.astype(int), predict_vector=y_preds2.astype(int))
-#     confmat2.plot(cmap=plt.cm.Greens,number_label=True,plot_lib="matplotlib")
-#     plt.savefig('../../plots/ML/LR_cm.png', dpi=300)    
-#     confmat2.print_matrix()
-#     confmat2.stat(summary=True)
-# =============================================================================
+    start_time = datetime.now()
+    linear_model = LogisticRegression(max_iter=100000)
+    linear_model.fit(X_train, y_train)
+    end_time = datetime.now()
+    print('TIME ELAPSED: ', end_time - start_time)
+    # y_preds2 = linear_model.predict(X_test)
+    
+    confmat2 = ConfusionMatrix(actual_vector=y_test.astype(int), predict_vector=y_preds2.astype(int))
+    confmat2.plot(cmap=plt.cm.Greens,number_label=True,plot_lib="matplotlib")
+    plt.savefig('../../plots/ML/LR_cm.png', dpi=300)    
+    confmat2.print_matrix()
+    confmat2.stat(summary=True)
     
 
 

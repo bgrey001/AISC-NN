@@ -30,10 +30,11 @@ import os
 from tqdm import tqdm
 from datetime import datetime
 from pycm import ConfusionMatrix
+from dask.dataframe import from_pandas
 
 from tsfresh import extract_features, extract_relevant_features, select_features
 from tsfresh.utilities.dataframe_functions import impute
-from tsfresh.feature_extraction import ComprehensiveFCParameters
+from tsfresh.feature_extraction import ComprehensiveFCParameters, MinimalFCParameters
 
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
@@ -413,6 +414,7 @@ match choice:
         # extract targets and features from sequences and then perform feature extraction using tsfresh
         # =============================================================================
         def process(seq_list, select, save, save_version):
+            
             out_df = pd.DataFrame(columns = ['id','time','f1', 'f2', 'f3', 'f4', 'f5'])
             targets = []
             
@@ -453,7 +455,26 @@ match choice:
             
             else: return out_df, targets.reshape(-1, 1)
 
-        process(seq_list=seq_list, select=True, save=True, save_version=save_version)
+        if saving:
+            process(seq_list=seq_list, select=True, save=True, save_version=save_version)
+        
+        
+        with open('../../data/pkl/feature_extraction/dfs_v1.pkl', 'rb') as f:
+            features, targets = pickle.load(f)
+            
+
+        ddf = from_pandas(features, npartitions=6)
+            
+        # extract features
+        extraction_settings = MinimalFCParameters() # this can be tuned?
+
+        # each sequence is being pushed into a single row with all features extracted along the y axis
+        X_fe = extract_features(ddf, column_id='id', column_sort='time', default_fc_parameters=extraction_settings, disable_progressbar=False)
+        X_fe.to_csv('../../data/csv/fe.csv')
+        df = X_fe.compute()
+        df['Y'] = targets
+        df.to_csv('../../data/csv/fe_pd.csv')
+
 
 
 

@@ -785,18 +785,16 @@ if __name__ == "__main__":
     # model.load_model(version_number=3, condition='final_model')
     # model.load_model(version_number=7, condition='init')
     model.load_model(version_number=5, condition='checkpoint')
-# =============================================================================
-#     model.version_number = 6
-#     h = model.history
-#     model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
-#     model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
-#     model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
-#     model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
-# =============================================================================
+    model.version_number = 6
+    h = model.history
+    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
     # list(dict.fromkeys('abracadabra'))
     # min(model.history['validation_loss'])
     # model.min_val_loss
-    model.fit(validate=True, epochs=60)
+    # model.fit(validate=True, epochs=60)
 # =============================================================================
 #     # model.prune_weights(amount=0.2)
 #     model.predict()

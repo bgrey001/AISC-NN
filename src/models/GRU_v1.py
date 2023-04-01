@@ -89,8 +89,11 @@ class GRU(nn.Module):
         fc_in = torch.cat((gru_out[:, -1, :self.hidden_dim], gru_out[:, 0, self.hidden_dim:]), dim=1)
 
         # classification layers
+        print(fc_in.shape)
         fc_in = self.relu(self.fc_1(fc_in))
+        print(fc_in.shape)
         fc_in = self.relu(self.fc_2(fc_in))
+        print(fc_in.shape)
         output = self.fc_3(fc_in)
         return output
 
@@ -99,7 +102,7 @@ class GRU(nn.Module):
 # =============================================================================
 class GRU_wrapper():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data_ver = '5'
+    data_ver = '4'
     shuffle = True
     # hyperparameters
     eta = 3e-4
@@ -265,9 +268,11 @@ class GRU_wrapper():
     # method that tests model on test data
     # =============================================================================
     def predict(self):
+        y_preds = []
+        y_test = []
         test_correct = test_loss_counter = test_loss = 0
         test_print_steps = 20
-        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.test_data.GRU_collate, drop_last=True)
+        test_generator = DataLoader(dataset=self.test_data, batch_size=self.batch_size, shuffle=True, collate_fn=self.test_data.GRU_collate, drop_last=True)
         for test_index, (test_features, test_labels, lengths) in enumerate(test_generator):
             self.model.eval()
             with torch.no_grad():
@@ -275,6 +280,8 @@ class GRU_wrapper():
                 test_output = self.model(test_features)
                 t_loss = self.criterion(test_output, test_labels)
                 test_outputs = torch.argmax(test_output, dim=1)
+                y_preds.append(test_outputs)
+                y_test.append(test_labels)
                 test_correct += ((test_outputs == test_labels).sum().item() / len(test_labels)) * 100 
                 if (test_index + 1) % (test_print_steps) == 0:
                     print(f'test batch number: {test_index + 1}, test loss = {t_loss}')
@@ -291,6 +298,7 @@ class GRU_wrapper():
         test_loss_counter = 0
         self.history['test_accuracy'] += self.test_accuracies
         self.history['test_loss'] += self.test_losses
+        return y_preds, y_test
 
 
 
@@ -714,17 +722,29 @@ if __name__ == "__main__":
                         combine=False)
     
     
-    model.print_params()
+    # model.print_params()
     # load_highest_model(model)
     # model.seq_length
     # =============================================================================
     # testing zone
     # =============================================================================
-    # model.load_model(3)
+    # model.load_model(12, 'final_model')
+    # model.load_model(4, 'final_model')
+    # h = model.history
+    # model.print_summary()
     model.fit(validate=True, epochs=1)
-    model.predict()
-    model.print_summary(True)
-    model.prune_weights(amount=0.2)
+# =============================================================================
+#     y_preds, y_test = model.predict()
+#     y_preds_all = torch.cat(y_preds).detach().cpu().numpy()
+#     y_test_all = torch.cat(y_test).detach().cpu().numpy()
+# =============================================================================
+    
+    # with open(f'saved_models//GRU_v12_preds.pkl', 'wb') as f:
+    #     pickle.dump(self.history, f)
+    
+    
+    # model.print_summary(True)
+    # model.prune_weights(amount=0.2)
     
     # model.load_model(version_number=vn, condition='checkpoint')    
     # model.min_val_loss

@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import dask
 from dask.dataframe import from_pandas
-import pickle
+import pickle as pkl
 from datetime import datetime
 from pycm import ConfusionMatrix
 
@@ -94,7 +94,7 @@ def process(seq_list, select, save, save_version):
     
     if save:
         with open(f'../../data/pkl/feature_extraction/dfs_v{save_version}.pkl', 'wb') as f:
-            pickle.dump([out_df, targets], f)
+            pkl.dump([out_df, targets], f)
         print(f'Saved v{save_version}')
     
     # extract features
@@ -113,7 +113,7 @@ def process(seq_list, select, save, save_version):
     
     if save:
         with open(f'../../data/pkl/feature_extraction/v{save_version}.pkl', 'wb') as f:
-            pickle.dump([X_train, X_test, y_train, y_test], f)
+            pkl.dump([X_train, X_test, y_train, y_test], f)
         print(f'Saved v{save_version}')
     
     else: return out_df, targets.reshape(-1, 1)
@@ -124,7 +124,7 @@ def process(seq_list, select, save, save_version):
 # =============================================================================
 def load_data(save_version):
     with open(f'../../data/pkl/feature_extraction/v{save_version}.pkl', 'rb') as f:
-        X_train, X_test, y_train, y_test = pickle.load(f)
+        X_train, X_test, y_train, y_test = pkl.load(f)
         
     return X_train, X_test, y_train, y_test
 
@@ -140,6 +140,25 @@ process(seq_list=seq_list, select=True, save=True, save_version=1)
 # svm_clf = SVC(C=1, kernel='rbf', verbose=1)
 # svm_clf.fit(X_train, y_train)
 # print(classification_report(y_test, svm_clf.predict(X_test)))
+
+if __name__ == "__main__":
+    with open('../../data/pkl/feature_extraction/dfs_v1.pkl', 'rb') as f:
+        features, targets = pkl.load(f)
+        
+
+    ddf = from_pandas(features, npartitions=6)
+        
+        
+    # extract features
+    extraction_settings = MinimalFCParameters() # this can be tuned?
+
+    # each sequence is being pushed into a single row with all features extracted along the y axis
+    X_fe = extract_features(ddf, column_id='id', column_sort='time', default_fc_parameters=extraction_settings, disable_progressbar=False)
+    X_fe.to_csv('../../data/csv/fe.csv')
+    df = X_fe.compute()
+    df['Y'] = targets
+    df.to_csv('../../data/csv/fe_pd.csv')
+
 
 
 

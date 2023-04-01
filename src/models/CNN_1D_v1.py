@@ -110,36 +110,23 @@ class CNN_1D(nn.Module):
     # forward propagation method
     # =============================================================================
     def forward(self, input_x):
-        print(input_x.shape)
         
         input_x = self.conv_1(input_x)
         input_x = self.batch_norm_1(input_x)
         input_x = self.maxpool(self.relu(input_x))
 
-        print(input_x.shape)
-        
         input_x = self.res_block_1(input_x)
         input_x = self.res_block_2(input_x)
-        print(input_x.shape)
 
         input_x = self.avgpool(input_x)
 
-        print(input_x.shape)
-
         input_x = self.conv_2(input_x)
-        print(input_x.shape)
-
         input_x = self.batch_norm_2(input_x)
         input_x = self.maxpool(self.relu(input_x))
-        print(input_x.shape)
-
         input_x = self.flatten(input_x)
-        print(input_x.shape)
-
         input_x = F.relu(self.fc_1(input_x))
         input_x = F.relu(self.fc_2(input_x))
         input_x = F.relu(self.fc_3(input_x))
-        print(input_x.shape)
 
         return input_x
 
@@ -154,7 +141,7 @@ class CNN_1D_wrapper():
     # =============================================================================
     # Data attributes
     # =============================================================================
-    data_ver = '5'
+    data_ver = '4'
     shuffle = True
     # =============================================================================
     # Hyperparameters
@@ -347,6 +334,9 @@ class CNN_1D_wrapper():
     # =============================================================================
 
     def predict(self):
+        
+        y_preds = []
+        y_test = []
 
         test_correct = test_loss_counter = test_loss = 0
         test_print_steps = 20
@@ -364,6 +354,8 @@ class CNN_1D_wrapper():
                 # calculate loss and valid_loss
                 t_loss = self.criterion(test_output, test_labels)
                 test_outputs = torch.argmax(test_output, dim=1)
+                y_preds.append(test_outputs)
+                y_test.append(test_labels)
                 # test_outputs = torch.zeros(test_labels.size()[0]).int().to(self.device)
                 test_correct += ((test_outputs == test_labels).sum().item() / len(test_labels)) * 100 
             
@@ -386,7 +378,7 @@ class CNN_1D_wrapper():
         # history
         self.history['test_accuracy'] += self.test_accuracies
         self.history['test_loss'] += self.test_losses
-
+        return y_preds, y_test
 
 
     # =============================================================================
@@ -736,7 +728,7 @@ def load_highest_model(model):
 # =============================================================================
 # driver code
 # =============================================================================
-def main():
+if __name__ == "__main__":        
     # load the best randomly initialised network parameters for further training
     nonrand = False
     current_dataset = 'linear_interp'
@@ -745,21 +737,21 @@ def main():
     if nonrand:
         nonrandom_init(K=20, dataset=current_dataset)
         
-    model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=64, combine=False)
+    model = CNN_1D_wrapper(CNN_1D, dataset=current_dataset, optimizer='AdamW', batch_size=128, combine=False)
     # load_highest_model(model)
     
     # =============================================================================
     # testing zone
     # =============================================================================
     # model = CNN_1D_wrapper(CNN_1D, dataset='linear_interp', optimizer='AdamW', batch_size=128, combine=False)
-    # model.load_model(2)
+    model.load_model(2)
     # model.fit(validate=True, epochs=1)
     # model.prune_weights(amount=0.21)
-    # model.predict()
+    model.predict()
     # model.print_params()
     # model.print_summary(print_cm=(True))
     
-    model.print_params()
+    # model.print_params()
     # model.save_model(2)
     
     
@@ -770,8 +762,3 @@ def main():
     
     # model.plot('accuracy')
     # model.plot('loss')
-    
-    
-if __name__ == "__main__":        
-    main()
-

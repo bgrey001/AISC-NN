@@ -884,16 +884,14 @@ if __name__ == "__main__":
     # =============================================================================
     # testing zone
     # =============================================================================
-    model.load_model(version_number=12, condition='final_model')
-# =============================================================================
-#     h = model.history
-#     model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
-#     model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
-#     model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
-#     model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
-# =============================================================================
+    model.load_model(version_number=13, condition='final_model')
+    h = model.history
+    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
     # model.fit(validate=True, epochs=20)
-    model.print_params()
+    # model.print_params()
     # # model.prune_weights(amount=0.2)
     # model.predict()
     # model.print_summary(print_cm=True)
@@ -920,8 +918,8 @@ if __name__ == "__main__":
     # model.plot('validation_accuracy')
     # model.plot('training_loss')
     # model.plot('validation_loss')
-    model.plot('accuracy')
-    model.plot('loss')
+    # model.plot('accuracy')
+    # model.plot('loss')
 
 
 
