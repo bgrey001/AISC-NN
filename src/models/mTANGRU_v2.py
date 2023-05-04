@@ -150,7 +150,6 @@ class mTAN_enc(nn.Module):
     
        
     def forward(self, x, time_steps):
-        print(x.shape)
         time_steps = time_steps.to(self.device)
         mask = x[:, :, self.dim:]
         mask = torch.cat((mask, mask), 2)
@@ -427,7 +426,7 @@ class mTAN_wrapper():
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
             plt.savefig(f'mTAN_v{self.version_number}.png', dpi=300)
-            plt.savefig(f'../../plots/mTAN/v{self.version_number}/confmat_mTAN_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/mTANGRU/confmat_mTAN_v{self.version_number}.png', dpi=300)
         
         self.history['confusion_matrix'] = confmat
         self.history['class_precisions'] = confmat.class_stat['PPV']
@@ -685,7 +684,7 @@ class mTAN_wrapper():
     # plot given metric
     # =============================================================================
 
-    def print_summary(self, print_cm=False):
+    def print_summary(self, print_cm=False, save_fig=False):
         self.confusion_matrix()
         print(f'\nModel: mTAN_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
@@ -706,7 +705,7 @@ class mTAN_wrapper():
               f'=====================================================================================================================\n'
               f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |\n'
               f'=====================================================================================================================\n\n')
-        if print_cm: self.confusion_matrix(print_confmat=(True))
+        if print_cm: self.confusion_matrix(print_confmat=print_cm, save_fig=save_fig)
 
 
 # =============================================================================
@@ -785,12 +784,13 @@ if __name__ == "__main__":
     # model.load_model(version_number=3, condition='final_model')
     # model.load_model(version_number=7, condition='init')
     model.load_model(version_number=5, condition='checkpoint')
-    model.version_number = 6
-    h = model.history
-    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
-    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
-    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
-    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+    model.print_summary(print_cm=True, save_fig=True)
+    # model.version_number = 6
+    # h = model.history
+    # model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+    # model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+    # model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+    # model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
     # list(dict.fromkeys('abracadabra'))
     # min(model.history['validation_loss'])
     # model.min_val_loss

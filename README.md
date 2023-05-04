@@ -1,4 +1,4 @@
-# Automatic identification system classification neural network (AISC-NN)
+# Automatic identification system classification neural network (AISC-NN) research project
 
 ### Code base for AISC-NN: an investigation into computational methods for classifying fishing vessels to identify illegal, unreported and unregulated fishing activity
 

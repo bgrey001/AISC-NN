@@ -529,7 +529,7 @@ class mTAN_wrapper():
         labels = np.concatenate(labels).ravel().tolist()
     
         confmat = ConfusionMatrix(actual_vector=labels, predict_vector=predicted)
-        
+         
         if print_confmat:
             confmat.print_matrix()
             confmat.stat(summary=True)
@@ -537,7 +537,7 @@ class mTAN_wrapper():
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
             plt.savefig(f'mTAN_v{self.version_number}.png', dpi=300)
-            plt.savefig(f'../../plots/mTAN/v{self.version_number}/confmat_mTAN_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/mTANCNN/confmat_mTAN_v{self.version_number}.png', dpi=300)
         
         self.history['confusion_matrix'] = confmat
         self.history['class_precisions'] = confmat.class_stat['PPV']
@@ -791,7 +791,7 @@ class mTAN_wrapper():
     # plot given metric
     # =============================================================================
 
-    def print_summary(self, print_cm=False):
+    def print_summary(self, print_cm=False, save_fig=False):
         self.confusion_matrix()
         print(f'\nModel: mTANCNN_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
@@ -812,7 +812,7 @@ class mTAN_wrapper():
               f'=====================================================================================================================\n'
               f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |\n'
               f'=====================================================================================================================\n\n')
-        if print_cm: self.confusion_matrix(print_confmat=(True))
+        if print_cm: self.confusion_matrix(print_confmat=print_cm, save_fig=save_fig)
 
 
 # =============================================================================
@@ -884,17 +884,17 @@ if __name__ == "__main__":
     # =============================================================================
     # testing zone
     # =============================================================================
-    model.load_model(version_number=13, condition='final_model')
-    h = model.history
-    model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
-    model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
-    model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
-    model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
+    model.load_model(version_number=12, condition='final_model')
+    # h = model.history
+    # model.history['validation_loss'] = list(dict.fromkeys(model.history['validation_loss']))
+    # model.history['validation_accuracy'] = list(dict.fromkeys(model.history['validation_accuracy']))
+    # model.history['training_loss'] = list(dict.fromkeys(model.history['training_loss']))
+    # model.history['training_accuracy'] = list(dict.fromkeys(model.history['training_accuracy']))
     # model.fit(validate=True, epochs=20)
     # model.print_params()
     # # model.prune_weights(amount=0.2)
-    # model.predict()
-    # model.print_summary(print_cm=True)
+    model.predict()
+    model.print_summary(print_cm=True, save_fig=True)
     # # model.confusion_matrix()
     # model.load_model(8, 'init')
     # model.predict()

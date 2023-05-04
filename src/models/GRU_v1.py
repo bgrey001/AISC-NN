@@ -89,11 +89,8 @@ class GRU(nn.Module):
         fc_in = torch.cat((gru_out[:, -1, :self.hidden_dim], gru_out[:, 0, self.hidden_dim:]), dim=1)
 
         # classification layers
-        print(fc_in.shape)
         fc_in = self.relu(self.fc_1(fc_in))
-        print(fc_in.shape)
         fc_in = self.relu(self.fc_2(fc_in))
-        print(fc_in.shape)
         output = self.fc_3(fc_in)
         return output
 
@@ -335,7 +332,7 @@ class GRU_wrapper():
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
             plt.savefig(f'GRU_v{self.version_number}.png', dpi=300)
-            plt.savefig(f'../../plots/GRU/v{self.version_number}/confmat_GRU_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/GRU/zero_padded/v{self.version_number}/confmat_GRU_v{self.version_number}.png', dpi=300)
         
         self.history['confusion_matrix'] = confmat
         self.history['class_precisions'] = confmat.class_stat['PPV']
@@ -593,7 +590,7 @@ class GRU_wrapper():
     # plot given metric
     # =============================================================================
 
-    def print_summary(self, print_cm=False):
+    def print_summary(self, print_cm=False, save_fig=False):
         self.confusion_matrix()
         print(f'\nModel: GRU_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
@@ -615,7 +612,7 @@ class GRU_wrapper():
               f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |\n'
               f'=====================================================================================================================\n\n')
         if print_cm:
-            self.confusion_matrix(print_confmat=(True))
+            self.confusion_matrix(print_confmat=True, save_fig=save_fig)
 
 
 # =============================================================================
@@ -654,50 +651,8 @@ def load_highest_model(model):
 # =============================================================================
 # driver code
 # =============================================================================
-def main():
-    # load the best randomly initialised network parameters for further training
-    nonrand = False
-    # current_dataset = 'linear_interp'
-    current_dataset = 'varying'
-    
-    if nonrand:
-        nonrandom_init(K=10, dataset=current_dataset)
-        
-    model = GRU_wrapper(GRU, 
-                        version_number=99,
-                        dataset=current_dataset, 
-                        n_units=2, 
-                        hidden_dim=64, 
-                        optimizer='AdamW', 
-                        bidirectional=True, 
-                        batch_size=64, 
-                        combine=False)
-    # load_highest_model(model)
-    
-    # =============================================================================
-    # testing zone
-    # =============================================================================
-    # model.load_model(3)
-    model.fit(validate=True, epochs=1)
-    # model.prune_weights(amount=0.2)
-    
-    mvl = model.min_val_loss
-    print('\nMIN VAL LOSS: ', mvl)
+# def main():
 
-    
-    # model.predict()
-    # model.print_summary(print_cm=True)
-    
-    # model.confusion_matrix()
-    # model.save_model(12)
-    
-    
-    # model.plot('training_accuracy')
-    # model.plot('validation_accuracy')
-    # model.plot('training_loss')
-    # model.plot('validation_loss')
-    # model.plot('accuracy')
-    # model.plot('loss')
 
     
 if __name__ == "__main__":  
@@ -729,10 +684,12 @@ if __name__ == "__main__":
     # testing zone
     # =============================================================================
     # model.load_model(12, 'final_model')
-    # model.load_model(4, 'final_model')
-    # h = model.history
-    # model.print_summary()
-    model.fit(validate=True, epochs=1)
+    model.load_model(4, 'final_model')
+    h = model.history
+    # model.predict()
+    # cm.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
+    # model.print_summary(print_cm=True, save_fig=False)
+    # model.fit(validate=True, epochs=1)
 # =============================================================================
 #     y_preds, y_test = model.predict()
 #     y_preds_all = torch.cat(y_preds).detach().cpu().numpy()

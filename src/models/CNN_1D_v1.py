@@ -421,7 +421,7 @@ class CNN_1D_wrapper():
         
         if save_fig:
             confmat.plot(cmap=plt.cm.Reds,number_label=True,plot_lib="matplotlib")
-            plt.savefig(f'../../plots/CNN_1D/ResBlock_v{self.version_number}/confmat_CNN_1D_v{self.version_number}.png', dpi=300)
+            plt.savefig(f'../../plots/CNN_1D/linear_interp/ResBlock_v{self.version_number}/confmat_CNN_1D_v{self.version_number}.png', dpi=300)
         
         
         self.history['confusion_matrix'] = confmat
@@ -665,7 +665,7 @@ class CNN_1D_wrapper():
     # plot given metric
     # =============================================================================
 
-    def print_summary(self, print_cm=False):
+    def print_summary(self, print_cm=False, save_fig=False):
         self.confusion_matrix()
         print(f'\nModel: CNN_1D_v{self.version_number} -> Hyperparamters: \n'
               f'Learnig rate = {self.eta} \nOptimiser = {self.optim_name} \nLoss = CrossEntropyLoss \n'
@@ -687,7 +687,7 @@ class CNN_1D_wrapper():
               f'|         {"{:.3f}".format((100 * self.history["class_F1_scores"][0]))}%        |      {"{:.3f}".format((100 * self.history["class_F1_scores"][1]))}%     |      {"{:.3f}".format((100 * self.history["class_F1_scores"][2]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][3]))}%      |     {"{:.3f}".format((100 * self.history["class_F1_scores"][4]))}%    |    {"{:.3f}".format((100 * self.history["class_F1_scores"][5]))}%    |\n'
               f'=====================================================================================================================\n\n')
         if print_cm:
-            self.confusion_matrix(print_confmat=(True))
+            self.confusion_matrix(print_confmat=print_cm, save_fig=save_fig)
 
 
 # =============================================================================
@@ -749,7 +749,7 @@ if __name__ == "__main__":
     # model.prune_weights(amount=0.21)
     model.predict()
     # model.print_params()
-    # model.print_summary(print_cm=(True))
+    model.print_summary(print_cm=True, save_fig=False)
     
     # model.print_params()
     # model.save_model(2)
